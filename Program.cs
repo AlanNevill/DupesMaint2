@@ -87,6 +87,7 @@ namespace DupesMaint2
 			return rootCommand.InvokeAsync(args).Result;
 		}
 
+		// subCommand3
 		private static void ProcessAnEXIF(FileInfo image)
 		{
 			IEnumerable<MetadataExtractor.Directory> directories = ImageMetadataReader.ReadMetadata(image.FullName);
