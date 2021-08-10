@@ -2,7 +2,7 @@
   "profiles": {
     "DupesMaint2": {
       "commandName": "Project",
-      "commandLineArgs": "EXIF --folder C:\\Users\\User\\OneDrive\\Photos --replace true"
+      "commandLineArgs": "deleteDups --delete true"
     }
   }
 }
