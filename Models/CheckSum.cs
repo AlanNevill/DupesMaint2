@@ -1,44 +1,28 @@
-using System;
-using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
+﻿using System;
+using System.Collections.Generic;
 
-namespace DupesMaint2
+#nullable disable
+
+namespace DupesMaint2.Models
 {
-
-    [Table("CheckSum")]
     public partial class CheckSum
     {
         public int Id { get; set; }
-
-        [StringLength(200)]
-        public string SHA { get; set; }
-
-        [Required]
-        [StringLength(200)]
+        public string Sha { get; set; }
         public string Folder { get; set; }
-
-        [Required]
-        [StringLength(100)]
         public string TheFileName { get; set; }
-
-        [Required]
-        [StringLength(10)]
         public string FileExt { get; set; }
-
         public int FileSize { get; set; }
-
-        [Column(TypeName = "smalldatetime")]
         public DateTime FileCreateDt { get; set; }
-
         public int TimerMs { get; set; }
-
-        [StringLength(200)]
+        public TimeSpan? Mp4duration { get; set; }
         public string Notes { get; set; }
-
-        public DateTime CreateDateTime { get; set; }
-
-        [StringLength(20)]
-        public string SCreateDateTime { get; set; }
-
+        public string MediaFileType { get; set; }
+        public DateTime? CreateDateTime { get; set; }
+        public string ScreateDateTime { get; set; }
+        public decimal AverageHash { get; set; }
+        public decimal DifferenceHash { get; set; }
+        public decimal PerceptualHash { get; set; }
+        public string FileFullName { get; set; }
     }
 }

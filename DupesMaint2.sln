@@ -5,6 +5,8 @@ VisualStudioVersion = 16.0.29806.167
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DupesMaint2", "DupesMaint2.csproj", "{D3674D1A-EEA5-48E1-A4D8-CC2EE0D4CF0A}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DupesMaint2_Test", "..\DupesMaint2_Test\DupesMaint2_Test.csproj", "{F1CFFEAD-B099-4CC6-876A-08087BB79925}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{D3674D1A-EEA5-48E1-A4D8-CC2EE0D4CF0A}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D3674D1A-EEA5-48E1-A4D8-CC2EE0D4CF0A}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D3674D1A-EEA5-48E1-A4D8-CC2EE0D4CF0A}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F1CFFEAD-B099-4CC6-876A-08087BB79925}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F1CFFEAD-B099-4CC6-876A-08087BB79925}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F1CFFEAD-B099-4CC6-876A-08087BB79925}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F1CFFEAD-B099-4CC6-876A-08087BB79925}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

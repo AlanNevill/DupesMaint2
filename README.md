@@ -1,8 +1,10 @@
 # DupesMaint2
 
 
-## CLI application - root command `DupesMaintConsole`
-Finds duplicate files from  database tables in Pops database, but only for the specified folder. 
+## CLI application - Similar to Find Duplicates
+Finds duplicate files from database tables in Pops database, but only for the specified folder. 
+
+### Root command `DupesMaintConsole`
 
 `from c in this._popsContext.CheckSum
                            join d in this._popsContext.CheckSumDups
@@ -35,7 +37,7 @@ Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
 
 ## Subcommand ProcessEXIF
 
- Command to extract EXIF date/time from all JPG image files in a folder tree. Optionally update the columns in the POPS.CheckSum table.
+Command to extract EXIF date/time from all JPG image files in a folder tree. Optionally update the columns in the POPS.CheckSum table.
 
 ### --folder string
 
