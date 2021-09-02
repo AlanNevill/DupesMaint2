@@ -36,10 +36,6 @@ namespace DupesMaint2.Models
             {
                 entity.ToTable("CheckSum");
 
-                entity.Property(e => e.AverageHash).HasColumnType("decimal(20, 0)");
-
-                entity.Property(e => e.DifferenceHash).HasColumnType("decimal(20, 0)");
-
                 entity.Property(e => e.FileCreateDt)
                     .HasColumnType("smalldatetime")
                     .HasDefaultValueSql("('1900-01-01')");
@@ -70,12 +66,17 @@ namespace DupesMaint2.Models
                     .HasMaxLength(1000)
                     .IsUnicode(false);
 
+                entity.Property(e => e.Notes2)
+                    .HasMaxLength(1000)
+                    .IsUnicode(false);
+
+                entity.Property(e => e.AverageHash).HasColumnType("decimal(20, 0)");
+                entity.Property(e => e.DifferenceHash).HasColumnType("decimal(20, 0)");
                 entity.Property(e => e.PerceptualHash).HasColumnType("decimal(20, 0)");
 
-                entity.Property(e => e.ScreateDateTime)
+                entity.Property(e => e.SCreateDateTime)
                     .HasMaxLength(30)
-                    .IsUnicode(false)
-                    .HasColumnName("SCreateDateTime");
+                    .IsUnicode(false);
 
                 entity.Property(e => e.Sha)
                     .IsRequired()
@@ -93,16 +94,26 @@ namespace DupesMaint2.Models
 
             modelBuilder.Entity<CheckSumDup>(entity =>
             {
-                entity.HasKey(e => new { e.Id, e.Sha });
+                entity.ToTable("CheckSumDup");
+
+                entity.Property(e => e.Id);
+
+                entity.HasKey(e => e.Id);
+
+                entity.Property(e => e.CheckSumId);
+
+                entity.Property(e => e.DupBasedOn)
+                    .HasMaxLength(20);
 
                 entity.Property(e => e.Sha)
                     .HasMaxLength(200)
                     .IsUnicode(false)
                     .HasColumnName("SHA");
 
-                entity.Property(e => e.FileExt)
-                    .HasMaxLength(10)
-                    .IsUnicode(false);
+
+                entity.Property(e => e.AverageHash).HasColumnType("decimal(20, 0)");
+                entity.Property(e => e.DifferenceHash).HasColumnType("decimal(20, 0)");
+                entity.Property(e => e.PerceptualHash).HasColumnType("decimal(20, 0)");
 
                 entity.Property(e => e.ToDelete)
                     .IsRequired()

@@ -32,7 +32,7 @@ namespace DupesMaint2
 			rootCommand.Handler = CommandHandler.Create((DirectoryInfo folder, bool replace) => { HelperLib.Process(folder, replace); });
 
 			// sub command to extract EXIF date/time from all JPG image files in a folder tree
-			#region "subcommand EXIF"
+			#region "subcommand2 EXIF"
 			Command command2 = new Command("EXIF", "extract EXIF date/time from all JPG image files in a folder tree")
 			{
 				new Option("--folder", "The root folder to scan image file, 'C:\\Users\\User\\OneDrive\\Photos")
@@ -52,7 +52,7 @@ namespace DupesMaint2
 			#endregion
 
 			// Command3 - Log the EXIF directories for a photo or video media file
-			#region "subcommand anEXIF"
+			#region "subcommand3 anEXIF"
 			Command command3 = new Command("anEXIF","Log the EXIF data from a single file.")
 			{
 				new Option("--image", "An image file, 'C:\\Users\\User\\OneDrive\\Photos\\2013\\02\\2013-02-24 12.34.54-3.jpg'")
@@ -66,7 +66,7 @@ namespace DupesMaint2
 			#endregion
 
 			// Command4 - Delete duplicates
-			#region "subcommand deleteDups"
+			#region "subcommand4 deleteDups"
 			Command command4 = new Command("deleteDups","Delete the duplicate files.")
 			{
 				new Option("--delete", "Replace default (true) or append (false) to the db tables CheckSum.")
@@ -79,8 +79,41 @@ namespace DupesMaint2
 			rootCommand.AddCommand(command4);
 			#endregion
 
+
+			// Command5 - calculate and store up to 3 percuptual hashes in the CheckSum table
+			#region "subcommand5 CalculateHashes"
+			Command command5 = new Command("CalculateHashes", "Calculate and store up to 3 perceptual hashes in the CheckSum table.")
+			{
+				new Option("--averageHash", "Calculate the AverageHash.")
+					{
+						Argument = new Argument<bool>(getDefaultValue: () => false),
+						IsRequired = true,
+					},
+				new Option("--differenceHash", "Calculate the DifferenceHash.")
+					{
+						Argument = new Argument<bool>(getDefaultValue: () => false),
+						IsRequired = true,
+					},
+				new Option("--perceptualHash", "Calculate the PerceptualHash.")
+					{
+						Argument = new Argument<bool>(getDefaultValue: () => false),
+						IsRequired = true,
+					},
+				new Option("--verbose", "Verbose logging.")
+					{
+						Argument = new Argument<bool>(getDefaultValue: () => false),
+						IsRequired = true,
+					}
+			};
+			command5.Handler = CommandHandler.Create((bool averageHash, bool differenceHash, bool perceptualHash, bool verbose) => { HelperLib.CalculateHashes(averageHash, differenceHash, perceptualHash, verbose); });
+			rootCommand.AddCommand(command5);
+			#endregion
+
+			HelperLib.SerilogSetup();
+
 			// call the method defined in the handler
 			return rootCommand.InvokeAsync(args).Result;
 		}
+
 	}
 }

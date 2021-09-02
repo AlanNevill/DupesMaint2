@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-#nullable disable
+#nullable enable
 
 namespace DupesMaint2.Models
 {
@@ -16,13 +16,14 @@ namespace DupesMaint2.Models
         public DateTime FileCreateDt { get; set; }
         public int TimerMs { get; set; }
         public TimeSpan? Mp4duration { get; set; }
-        public string Notes { get; set; }
-        public string MediaFileType { get; set; }
+        public string? Notes { get; set; }
+        public string? Notes2 { get; set; }
+        public string? MediaFileType { get; set; }
         public DateTime? CreateDateTime { get; set; }
-        public string ScreateDateTime { get; set; }
-        public decimal AverageHash { get; set; }
-        public decimal DifferenceHash { get; set; }
-        public decimal PerceptualHash { get; set; }
+        public string? SCreateDateTime { get; set; }
+        public decimal? AverageHash { get; set; }
+        public decimal? DifferenceHash { get; set; }
+        public decimal? PerceptualHash { get; set; }
         public string FileFullName { get; set; }
     }
 }

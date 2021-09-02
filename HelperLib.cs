@@ -11,8 +11,6 @@ using System.Security.Cryptography;
 using ExifLibrary;
 using MetadataExtractor;
 
-
-
 namespace DupesMaint2
 {
     static public class HelperLib
@@ -20,7 +18,7 @@ namespace DupesMaint2
 		public static readonly string ConnectionString = @"data source=SNOWBALL\MSSQLSERVER01;initial catalog=POPS;integrated security=True;MultipleActiveResultSets=True";
 		//public static string ConnectionString => ConfigurationManager.ConnectionStrings["PopsDB"].ConnectionString;
 
-		public static List<FileExtensionTypes> fileExtensionTypes = new()
+		static readonly List<FileExtensionTypes> fileExtensionTypes = new()
 		{
 			new FileExtensionTypes { Type = ".3GP", Group = "Video" },
 			new FileExtensionTypes { Type = ".AVI", Group = "Video" },
@@ -46,10 +44,25 @@ namespace DupesMaint2
 			new FileExtensionTypes { Type = ".WEBP", Group = "Photo" },
 		};
 
+		// list of file type extensions that can be hashed
+		static readonly List<FileExtensionTypes> fileExtensionTypes2Hashing = new()
+		{
+			new FileExtensionTypes { Type = ".BMP", Group = "Photo" },
+			new FileExtensionTypes { Type = ".GIF", Group = "Photo" },
+			new FileExtensionTypes { Type = ".JPEG", Group = "Photo" },
+			new FileExtensionTypes { Type = ".JPG", Group = "Photo" },
+			new FileExtensionTypes { Type = ".PNG", Group = "Photo" },
+		};
+
 		// List of Checksum rows where filenames are the same
-		private static readonly List<CheckSum> Checksums = new List<CheckSum>();
+		private static List<CheckSum> _checkSums = new ();
 
-
+		/// <summary>
+		/// Root Command - Process
+		/// 
+		/// </summary>
+		/// <param name="folder">DirectoryInfo - root folder to the folder structure.</param>
+		/// <param name="replace">Bool - If true truncate table CheckSum else add rows.</param>
 		public static void Process(DirectoryInfo folder, bool replace)
 		{
 			Serilog.Log.Information($"Process - Starting find duplicates in target folder is {folder.FullName}\tTruncate table CheckSum is: {replace}.");
@@ -65,7 +78,116 @@ namespace DupesMaint2
 			int fileCount = ProcessFiles(folder);
 
 			_stopwatch.Stop();
-			Serilog.Log.Information($"INFO\t- Total execution time: {_stopwatch.ElapsedMilliseconds / 60000} mins. # of files processed: {fileCount}\n.{new String('-', 150)}\n");
+			Serilog.Log.Information($"Process - Total execution time: {_stopwatch.Elapsed.Minutes:N1} mins. # of files processed: {fileCount}\n.{new String('-', 150)}\n");
+		}
+
+
+		/// <summary>
+		/// Command5 - calculate and store the requested hashes in the CheckSum table
+		/// </summary>
+		/// <param name="averageHash">bool -</param>
+		/// <param name="differenceHash">bool -</param>
+		/// <param name="perceptualHash">bool - </param>
+		/// <param name="verbose">bool - verbose logging</param>
+		public static void CalculateHashes(bool averageHash, bool differenceHash, bool perceptualHash, bool verbose)
+        {
+			PopsDbContext popsDbContext = new PopsDbContext();
+			Serilog.Log.Information($"CalculateHashes - Starting\n\taverageHash: {averageHash}\n\tdifferenceHash: {differenceHash}\n\tperceptualHash: {perceptualHash}\n\tverbose: {verbose}.");
+			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
+			int processedCount = 0, dropCount = 0;
+			string logMessage;
+
+			// get a list of all CheckSum rows 
+			var checkSums =  popsDbContext.CheckSums.AsList();
+            foreach (var checkSum in checkSums)
+            {
+				// drop where MediaFileType is not 'Unknown'
+				if (checkSum.MediaFileType == "Unknown")
+                {
+					dropCount++;
+					continue;
+				}
+
+				var type = fileExtensionTypes2Hashing.Find(e => e.Type == checkSum.FileExt);
+                if (type is null)
+                {
+					dropCount++;
+					continue;
+                }
+
+				// type can have hashes calculated
+				FileInfo fileInfo = new(checkSum.FileFullName);
+
+				// image processor seems to have a limit on file size
+                if (fileInfo.Length > 71000000)
+                {
+					logMessage = $"CalculateHashes - id: {checkSum.Id}, fileInfo.Length: {fileInfo.Length,12:N0}, greater than limit 71,000,000";
+					checkSum.Notes2 = logMessage;
+					Serilog.Log.Warning(logMessage);
+					dropCount++;
+					continue;
+				}
+
+				try    // Calculate the requested hashes
+                {
+                    if (averageHash)
+                    {
+						checkSum.AverageHash = calcAverageHash(fileInfo);
+                    }
+                    if (differenceHash)
+                    {
+						checkSum.DifferenceHash = calcDifferenceHash(fileInfo);
+                    }
+                    if (perceptualHash)
+                    {
+						checkSum.PerceptualHash = calcPerceptualHash(fileInfo);
+                    }
+				}
+				catch (Exception exc)
+                {
+					Serilog.Log.Error($"CalculateHashes - id: {checkSum.Id}\nexc: {exc}\n.{new String('-', 150)}\n");
+					throw;
+                }
+
+                if (verbose)
+                {
+					Serilog.Log.Information($"CalculateHashes - id: {checkSum.Id}, checkSum.AverageHash: {checkSum.AverageHash}, checkSum.DifferenceHash: {checkSum.DifferenceHash}, checkSum.PerceptualHash: {checkSum.PerceptualHash}.");
+				}
+
+				if ((++processedCount + dropCount) % 1000 == 0)
+				{
+					Serilog.Log.Information($"CalculateHashes - {processedCount + dropCount,6:N0}. Completed:{(((processedCount + dropCount) * 100) / checkSums.Count),3:N0}%.");
+				}
+			}
+			Serilog.Log.Information($"CalculateHashes - Finished processing checkSums.Count: {checkSums.Count:N0}, processedCount: {processedCount:N0}, dropCount: {dropCount:N0}.");
+
+			// update the database
+			popsDbContext.SaveChanges();
+
+			_stopwatch.Stop();
+			Serilog.Log.Information($"CalculateHashes - Total execution time: {_stopwatch.Elapsed.Minutes:N1} mins.\n.{new String('-', 150)}");
+
+			////////////////
+			// local methods
+			////////////////
+			static decimal calcAverageHash(FileInfo fileInfo)
+			{
+				AverageHash averageHash = new();    // instaniate the class
+				return (decimal)averageHash.Hash(GetStream(fileInfo));
+			}
+
+			static decimal calcDifferenceHash(FileInfo fileInfo)
+			{
+				DifferenceHash differenceHash = new();    // instaniate the class
+				return (decimal)differenceHash.Hash(GetStream(fileInfo));
+			}
+
+			static decimal calcPerceptualHash(FileInfo fileInfo)
+			{
+				PerceptualHash perceptualHash = new();    // instaniate the class
+				return (decimal)perceptualHash.Hash(GetStream(fileInfo));
+			}
+
 		}
 
 		/// <summary>
@@ -92,9 +214,8 @@ namespace DupesMaint2
 				// get the EXIF date/time 
 				(DateTime _CreateDateTime, string _sCreateDateTime) = HelperLib.ImageEXIF(fi);
 
-
 				// instantiate a new CheckSum object for the file
-				CheckSum checkSum = new CheckSum
+				CheckSum checkSum = new ()
 				{
 					Sha = "",
 					Folder = fi.DirectoryName,
@@ -103,7 +224,7 @@ namespace DupesMaint2
 					FileSize = (int)fi.Length,
 					FileCreateDt = fi.CreationTime,
 					CreateDateTime = _CreateDateTime,
-					ScreateDateTime = _sCreateDateTime
+					SCreateDateTime = _sCreateDateTime
 				};
 
 				// insert into DB table
@@ -141,56 +262,55 @@ namespace DupesMaint2
 		}
 
 
-
+		/// <summary>
+		/// ProcessFiles - Process all the .JPG files in a folder structure
+		/// </summary>
+		/// <param name="folder">DirectoryInfo - The root folder to search.</param>
+		/// <returns>Int - Number of files processed</returns>
 		private static int ProcessFiles(DirectoryInfo folder)
 		{
-			int _count = 0;
-
 			System.Diagnostics.Stopwatch process100Watch = System.Diagnostics.Stopwatch.StartNew();
 
+			int _count = 0;
 			FileInfo[] _files = folder.GetFiles("*.JPG", SearchOption.AllDirectories);
-			Serilog.Log.Information($"ProcessFiles - Found {_files.Length:N0} to process.");
+			Serilog.Log.Information($"ProcessFiles - Found {_files.Length:N0} files to process.");
 
 			// Process all the JPG files in the source directory tree
-			foreach (FileInfo fi in _files)
+			foreach (FileInfo fileInfo in _files)
 			{
-				// calculate the SHA string for the file and return with the time taken in ms in a tuple
-				(string SHA, int timerMs) = CalcSHA(fi);
+				// calculate the SHA string for the file and return it with the time taken in ms in a tuple
+				(string SHA, int timerMs) = CalcSHA(fileInfo);
 
 				// instantiate a new CheckSum object for the file
 				CheckSum checkSum = new CheckSum
 				{
 					Sha = SHA,
-					Folder = fi.DirectoryName,
-					TheFileName = fi.Name,
-					FileExt = fi.Extension.ToUpper(),
-					FileSize = (int)fi.Length,
-					FileCreateDt = fi.CreationTime,
+					Folder = fileInfo.DirectoryName,
+					TheFileName = fileInfo.Name,
+					FileExt = fileInfo.Extension.ToUpper(),
+					FileSize = (int)fileInfo.Length,
+					FileCreateDt = fileInfo.CreationTime,
 					TimerMs = timerMs
 				};
 
-				// see if the file name already exists in the Checksums list
-				CheckSum alreadyExists = Checksums.Find(x => x.Sha == SHA);
+				// see if the file name already exists in the CheckSums list
+				CheckSum alreadyExists = _checkSums.Find(x => x.Sha == SHA);
 
-				// if the file name already exists then write the Checksum and the new Checksum to the CheckSum table is the DB
+				// if the file name already exists then write the Checksum and the new Checksum to the CheckSum tables in the DB
 				if (alreadyExists != null)
 				{
-					CheckSum_ins(alreadyExists);
-					CheckSum_ins(checkSum);
+					CheckSum_upd(alreadyExists);
+					CheckSum_upd(checkSum);
 				}
 				else // just add the new file to the CheckSum list in memory
 				{
-					Checksums.Add(checkSum);
+					_checkSums.Add(checkSum);
 				}
 
-				_count++;
-
-				if (_count % 1000 == 0)
+				if (++_count % 1000 == 0)
 				{
 					process100Watch.Stop();
-					Serilog.Log.Information($"ProcessFiles - {_count}. Last 100 in {process100Watch.ElapsedMilliseconds / 1000} secs. " +
-						$"Completed: {(_count * 100) / _files.Length}%. " +
-						$"Processing folder: {fi.DirectoryName}");
+					Serilog.Log.Information($"ProcessFiles - {_count}. Last 100 in {process100Watch.Elapsed.Seconds} secs. Completed: {(_count * 100) / _files.Length}%. Processing folder: {fileInfo.DirectoryName}");
 					process100Watch.Reset();
 					process100Watch.Start();
 				}
@@ -198,13 +318,14 @@ namespace DupesMaint2
 			return _count;
 		}
 
+
 		// Process the duplicate rows in the CheckSum table and report files to delete or report AND delete.
 		public static void DeleteDupes(bool delete)
 		{
 			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
 			// 1. Make sure there are some duplicate rows in the CheckSum table
-			const string sql = @"select SHA,Count(*) as DupeCount from Checksum group by SHA having Count(*)>1";
+			const string sql = @"select SHA,Count(*) as DupeCount from CheckSum group by SHA having Count(*)>1";
 
 			Serilog.Log.Information($"DeleteDupes - Starting DeleteDupes: --delete: {delete} sql: {sql}");
 
@@ -222,7 +343,7 @@ namespace DupesMaint2
 			ProcessDeleteDupes();
 
 			_stopwatch.Stop();
-			Serilog.Log.Information($"INFO\t- Total execution time: {_stopwatch.ElapsedMilliseconds / 60000} mins.{new String('-', 150)}\n");
+			Serilog.Log.Information($"INFO\t- Total execution time: {_stopwatch.Elapsed.Minutes} mins.{new String('-', 150)}\n");
 
 			/////////////////
 			// local function
@@ -266,6 +387,7 @@ namespace DupesMaint2
 			}
 		}
 
+
 		// calculate the SHA256 checksum for the file and return it with the elapsed processing time using a tuple
 		private static (string SHA, int timerMs) CalcSHA(FileInfo fi)
 		{
@@ -286,10 +408,10 @@ namespace DupesMaint2
 		}
 
 
-		private static void CheckSum_ins(CheckSum checkSum)
+		private static void CheckSum_upd(CheckSum checkSum)
 		{
 			// create the SqlParameters for the stored procedure
-			DynamicParameters p = new DynamicParameters();
+			DynamicParameters p = new();
 			p.Add("@SHA", checkSum.Sha);
 			p.Add("@Folder", checkSum.Folder);
 			p.Add("@TheFileName", checkSum.TheFileName);
@@ -302,13 +424,12 @@ namespace DupesMaint2
             // call the stored procedure
             using IDbConnection db = new SqlConnection(ConnectionString);
             db.Execute("dbo.spCheckSum_ins", p, commandType: CommandType.StoredProcedure);
-
         }
 
 		public static void CheckSum_ins2(CheckSum checkSum)
 		{
 			// create the SqlParameters for the stored procedure
-			DynamicParameters p = new DynamicParameters();
+			DynamicParameters p = new ();
 			p.Add("@SHA", checkSum.Sha);
 			p.Add("@Folder", checkSum.Folder);
 			p.Add("@TheFileName", checkSum.TheFileName);
@@ -318,7 +439,7 @@ namespace DupesMaint2
 			p.Add("@TimerMs", checkSum.TimerMs);
 			p.Add("@Notes", "");
 			p.Add("@CreateDateTime", checkSum.CreateDateTime);
-			p.Add("@SCreateDateTime", checkSum.ScreateDateTime);
+			p.Add("@SCreateDateTime", checkSum.SCreateDateTime);
 
             // call the stored procedure
             using IDbConnection db = new SqlConnection(ConnectionString);
@@ -387,6 +508,15 @@ namespace DupesMaint2
 			Serilog.Log.Information(new String('-', 50));
 			Serilog.Log.Information($"DupesMaint2 - starting using DATABASE: {CnStr.InitialCatalog.ToUpper()}");
 			Serilog.Log.Information(new String('-', 50));
+		}
+
+		private static Stream GetStream(FileInfo fileInfo)
+		{
+			if (fileInfo.Exists)
+			{
+				return fileInfo.OpenRead();
+			}
+			throw new FileNotFoundException($"{fileInfo.FullName}");
 		}
 	}
 }
