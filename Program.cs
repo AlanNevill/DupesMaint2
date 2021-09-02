@@ -1,6 +1,9 @@
 ﻿using System.Collections.Generic;
 using System.CommandLine;
 using System.CommandLine.Invocation;
+using System.CommandLine.Binding;
+using System.CommandLine.Parsing;
+using System.CommandLine.Suggestions;
 using System.IO;
 
 namespace DupesMaint2
@@ -82,7 +85,7 @@ namespace DupesMaint2
 
 			// Command5 - calculate and store up to 3 percuptual hashes in the CheckSum table
 			#region "subcommand5 CalculateHashes"
-			Command command5 = new Command("CalculateHashes", "Calculate and store up to 3 perceptual hashes in the CheckSum table.")
+			Command command5 = new ("CalculateHashes", "Calculate and store up to 3 perceptual hashes in the CheckSum table.")
 			{
 				new Option("--averageHash", "Calculate the AverageHash.")
 					{
@@ -101,12 +104,30 @@ namespace DupesMaint2
 					},
 				new Option("--verbose", "Verbose logging.")
 					{
-						Argument = new Argument<bool>(getDefaultValue: () => false),
-						IsRequired = true,
+						Argument = new Argument<bool>(getDefaultValue: () => false)
 					}
 			};
 			command5.Handler = CommandHandler.Create((bool averageHash, bool differenceHash, bool perceptualHash, bool verbose) => { HelperLib.CalculateHashes(averageHash, differenceHash, perceptualHash, verbose); });
 			rootCommand.AddCommand(command5);
+			#endregion
+
+
+			// Command6 - calculate and store up to 3 percuptual hashes in the CheckSum table
+			#region "subcommand6 CheckSumDups insert or update based on hash from CheckSum"
+			Command command6 = new ("FindDupsUsingHash", "CheckSumDups insert or update based on hash from CheckSum.")
+			{
+				new Option("--hash", "Hash to use average, difference, perceptual.")
+					{
+						Argument = new Argument<string>().FromAmong("average","difference","perceptual"),
+						IsRequired = true,						
+					},
+				new Option("--verbose", "Verbose logging.")
+					{
+						Argument = new Argument<bool>(getDefaultValue: () => false)
+					}
+			};
+			command6.Handler = CommandHandler.Create((string hash, bool verbose) => { HelperLib.FindDupsUsingHash(hash, verbose); });
+			rootCommand.AddCommand(command6);
 			#endregion
 
 			HelperLib.SerilogSetup();

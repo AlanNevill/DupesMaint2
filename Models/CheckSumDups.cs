@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 namespace DupesMaint2.Models
 {
-    public partial class CheckSumDup
+    public partial class CheckSumDups
     {
         public int Id { get; set; }
         public int CheckSumId { get; set; }

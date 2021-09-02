@@ -26,4 +26,14 @@ namespace DupesMaint2.Models
         public decimal? PerceptualHash { get; set; }
         public string FileFullName { get; set; }
     }
+
+#nullable disable
+
+    public partial class dupOnHash
+    {
+        public int Id { get; set; }
+        public string Sha { get; set; }
+        public decimal AverageHash { get; set; }
+
+    }
 }

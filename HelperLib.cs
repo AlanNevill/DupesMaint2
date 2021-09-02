@@ -11,10 +11,15 @@ using System.Security.Cryptography;
 using ExifLibrary;
 using MetadataExtractor;
 
+using System.Reflection;
+using Microsoft.EntityFrameworkCore;
+using System.Linq;
+using System.Data.Common;
+
 namespace DupesMaint2
 {
-    static public class HelperLib
-    {
+	static public class HelperLib
+	{
 		public static readonly string ConnectionString = @"data source=SNOWBALL\MSSQLSERVER01;initial catalog=POPS;integrated security=True;MultipleActiveResultSets=True";
 		//public static string ConnectionString => ConfigurationManager.ConnectionStrings["PopsDB"].ConnectionString;
 
@@ -55,7 +60,7 @@ namespace DupesMaint2
 		};
 
 		// List of Checksum rows where filenames are the same
-		private static List<CheckSum> _checkSums = new ();
+		private static List<CheckSum> _checkSums = new();
 
 		/// <summary>
 		/// Root Command - Process
@@ -90,67 +95,81 @@ namespace DupesMaint2
 		/// <param name="perceptualHash">bool - </param>
 		/// <param name="verbose">bool - verbose logging</param>
 		public static void CalculateHashes(bool averageHash, bool differenceHash, bool perceptualHash, bool verbose)
-        {
+		{
 			PopsDbContext popsDbContext = new PopsDbContext();
-			Serilog.Log.Information($"CalculateHashes - Starting\n\taverageHash: {averageHash}\n\tdifferenceHash: {differenceHash}\n\tperceptualHash: {perceptualHash}\n\tverbose: {verbose}.");
+			Serilog.Log.Information($"CalculateHashes - Starting\n\taverageHash: {averageHash}\n\tdifferenceHash: {differenceHash}\n\tperceptualHash: {perceptualHash}\n\tverbose: {verbose}\n");
 			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 			int processedCount = 0, dropCount = 0;
 			string logMessage;
 
 			// get a list of all CheckSum rows 
-			var checkSums =  popsDbContext.CheckSums.AsList();
-            foreach (var checkSum in checkSums)
-            {
+			var checkSums = popsDbContext.CheckSums.Where(e => e.Id <= 48100).AsList();
+			Serilog.Log.Information($"CalculateHashes - Found checkSums.Count: {checkSums.Count:N0}");
+
+			foreach (var checkSum in checkSums)
+			{
 				// drop where MediaFileType is not 'Unknown'
 				if (checkSum.MediaFileType == "Unknown")
-                {
+				{
 					dropCount++;
 					continue;
 				}
 
 				var type = fileExtensionTypes2Hashing.Find(e => e.Type == checkSum.FileExt);
-                if (type is null)
-                {
+				if (type is null)
+				{
 					dropCount++;
 					continue;
-                }
+				}
 
 				// type can have hashes calculated
 				FileInfo fileInfo = new(checkSum.FileFullName);
 
-				// image processor seems to have a limit on file size
-                if (fileInfo.Length > 71000000)
-                {
-					logMessage = $"CalculateHashes - id: {checkSum.Id}, fileInfo.Length: {fileInfo.Length,12:N0}, greater than limit 71,000,000";
-					checkSum.Notes2 = logMessage;
-					Serilog.Log.Warning(logMessage);
-					dropCount++;
-					continue;
-				}
-
 				try    // Calculate the requested hashes
-                {
-                    if (averageHash)
-                    {
-						checkSum.AverageHash = calcAverageHash(fileInfo);
-                    }
-                    if (differenceHash)
-                    {
-						checkSum.DifferenceHash = calcDifferenceHash(fileInfo);
-                    }
-                    if (perceptualHash)
-                    {
-						checkSum.PerceptualHash = calcPerceptualHash(fileInfo);
-                    }
-				}
-				catch (Exception exc)
-                {
-					Serilog.Log.Error($"CalculateHashes - id: {checkSum.Id}\nexc: {exc}\n.{new String('-', 150)}\n");
-					throw;
-                }
+				{
+					// image processor seems to have a limit on file size
+					if (fileInfo.Length > 71000000)
+					{
+						logMessage = $"CalculateHashes - id: {checkSum.Id}, fileInfo.Length: {fileInfo.Length,12:N0}, greater than limit 71,000,000";
+						checkSum.Notes2 = logMessage;
+						Serilog.Log.Warning(logMessage);
+						dropCount++;
+						continue;
+					}
 
-                if (verbose)
-                {
+					if (averageHash)
+					{
+						checkSum.AverageHash = calcAverageHash(fileInfo);
+					}
+					if (differenceHash)
+					{
+						checkSum.DifferenceHash = calcDifferenceHash(fileInfo);
+					}
+					if (perceptualHash)
+					{
+						checkSum.PerceptualHash = calcPerceptualHash(fileInfo);
+					}
+				}
+				catch (SixLabors.ImageSharp.UnknownImageFormatException exc)
+				{
+					Serilog.Log.Error($"CalculateHashes - id: {checkSum.Id}, exc: {exc.Message}\n{new String('-', 150)}\n");
+				}
+				catch (SixLabors.ImageSharp.InvalidImageContentException iIcE)
+				{
+					Serilog.Log.Error($"CalculateHashes - id: {checkSum.Id}, iIcE: {iIcE.Message}\n{new String('-', 150)}\n");
+				}
+				catch (FileNotFoundException fnfEx)
+				{
+					Serilog.Log.Error($"CalculateHashes - id: {checkSum.Id}, fnfEx: {fnfEx.Message}\n{new String('-', 150)}\n");
+				}
+				catch (Exception ex)
+				{
+					Serilog.Log.Error($"CalculateHashes - id: {checkSum.Id}\nex: {ex}\n{new String('-', 150)}\n");
+					throw;
+				}
+
+				if (verbose)
+				{
 					Serilog.Log.Information($"CalculateHashes - id: {checkSum.Id}, checkSum.AverageHash: {checkSum.AverageHash}, checkSum.DifferenceHash: {checkSum.DifferenceHash}, checkSum.PerceptualHash: {checkSum.PerceptualHash}.");
 				}
 
@@ -170,22 +189,106 @@ namespace DupesMaint2
 			////////////////
 			// local methods
 			////////////////
-			static decimal calcAverageHash(FileInfo fileInfo)
+			decimal calcAverageHash(FileInfo fileInfo)
 			{
 				AverageHash averageHash = new();    // instaniate the class
 				return (decimal)averageHash.Hash(GetStream(fileInfo));
 			}
 
-			static decimal calcDifferenceHash(FileInfo fileInfo)
+			decimal calcDifferenceHash(FileInfo fileInfo)
 			{
 				DifferenceHash differenceHash = new();    // instaniate the class
 				return (decimal)differenceHash.Hash(GetStream(fileInfo));
 			}
 
-			static decimal calcPerceptualHash(FileInfo fileInfo)
+			decimal calcPerceptualHash(FileInfo fileInfo)
 			{
 				PerceptualHash perceptualHash = new();    // instaniate the class
 				return (decimal)perceptualHash.Hash(GetStream(fileInfo));
+			}
+
+		}
+
+		public static void FindDupsUsingHash(string hash, bool verbose)
+		{
+			PopsDbContext popsDbContext = new PopsDbContext();
+			string hashToUse = string.Empty;
+			int processedCount = 0;
+			switch (hash.ToLower())
+			{
+				case "average":
+					hashToUse = "AverageHash";
+					break;
+				case "difference":
+					hashToUse = "DifferenceHash";
+					break;
+				case "perceptual":
+					hashToUse = "PerceptualHash";
+					break;
+			}
+
+			string sqlRaw = $"select Id, SHA, {hashToUse} from CheckSum where {hashToUse} in (select {hashToUse} from CheckSum where {hashToUse} is not null group by {hashToUse} having count(*) > 1) order by {hashToUse}";
+			Serilog.Log.Information($"FindDupsUsingHash - Starting\n\thash: {hash} - {hashToUse}\n\tverbose: {verbose}\n\tsqlRaw: {sqlRaw}\n");
+			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
+
+			var checkSumDups = popsDbContext.CheckSumDups.ToList();
+			Serilog.Log.Information($"FindDupsUsingHash - Loaded checkSumDups.Count: {checkSumDups.Count:N0}");
+
+			var dupOnhashes = popsDbContext.dupOnHashes.FromSqlRaw(sqlRaw).ToList();
+			if (dupOnhashes.Count == 0)
+			{
+				Serilog.Log.Warning($"FindDupsUsingHash - No duplicates found based on hash: {hashToUse}\n.{new String('-', 150)}");
+				return;
+			}
+			Serilog.Log.Information($"FindDupsUsingHash - Loaded dupOnhashes.Count: {dupOnhashes.Count:N0}");
+
+			// Process the list of duplicates found in CheckSum table
+			foreach (var dupOnHash in dupOnhashes)
+			{
+				CheckSumDup_upsert(dupOnHash);
+
+				if (++processedCount % 1000 == 0)
+				{
+					Serilog.Log.Information($"FindDupsUsingHash - {processedCount,6:N0}. Completed:{((processedCount * 100) / dupOnhashes.Count),3:N0}%.");
+				}
+			}
+
+			// update the database
+			popsDbContext.SaveChanges();
+
+			_stopwatch.Stop();
+			Serilog.Log.Information($"FindDupsUsingHash - Total execution time: {_stopwatch.Elapsed.Seconds:N0} secs.\n.{new String('-', 150)}");
+
+			////////////////
+			// local methods
+			////////////////
+			void CheckSumDup_upsert(dupOnHash checkSum)
+			{
+				var checkSumDup = checkSumDups.Find(e => e.CheckSumId == checkSum.Id);
+				if (checkSumDup is null)    // need to insert a new CheckSumDups row
+				{
+					CheckSumDups checkSumDup1 = new()
+					{
+						CheckSumId = checkSum.Id,
+						DupBasedOn = hashToUse,
+						Sha = checkSum.Sha,
+						AverageHash = checkSum.AverageHash
+					};
+					checkSumDups.Add(checkSumDup1);
+
+					if (verbose)
+					{
+						Serilog.Log.Information($"FindDupsUsingHash - Added new CheckSumDup, checkSum.Id: {checkSum.Id}.");
+					}
+				}
+				else     // need to update an existing CheckSumDups row
+				{
+					checkSumDup.AverageHash = checkSum.AverageHash;
+					if (verbose)
+					{
+						Serilog.Log.Information($"FindDupsUsingHash - Updated existing CheckSumDup, checkSum.Id: {checkSumDup.Id}, checkSumDup.CheckSumId: {checkSumDup.CheckSumId}.");
+					}
+				}
 			}
 
 		}
@@ -215,7 +318,7 @@ namespace DupesMaint2
 				(DateTime _CreateDateTime, string _sCreateDateTime) = HelperLib.ImageEXIF(fi);
 
 				// instantiate a new CheckSum object for the file
-				CheckSum checkSum = new ()
+				CheckSum checkSum = new()
 				{
 					Sha = "",
 					Folder = fi.DirectoryName,
@@ -421,15 +524,15 @@ namespace DupesMaint2
 			p.Add("@TimerMs", checkSum.TimerMs);
 			p.Add("@Notes", "");
 
-            // call the stored procedure
-            using IDbConnection db = new SqlConnection(ConnectionString);
-            db.Execute("dbo.spCheckSum_ins", p, commandType: CommandType.StoredProcedure);
-        }
+			// call the stored procedure
+			using IDbConnection db = new SqlConnection(ConnectionString);
+			db.Execute("dbo.spCheckSum_ins", p, commandType: CommandType.StoredProcedure);
+		}
 
 		public static void CheckSum_ins2(CheckSum checkSum)
 		{
 			// create the SqlParameters for the stored procedure
-			DynamicParameters p = new ();
+			DynamicParameters p = new();
 			p.Add("@SHA", checkSum.Sha);
 			p.Add("@Folder", checkSum.Folder);
 			p.Add("@TheFileName", checkSum.TheFileName);
@@ -441,10 +544,10 @@ namespace DupesMaint2
 			p.Add("@CreateDateTime", checkSum.CreateDateTime);
 			p.Add("@SCreateDateTime", checkSum.SCreateDateTime);
 
-            // call the stored procedure
-            using IDbConnection db = new SqlConnection(ConnectionString);
-            db.Execute("dbo.spCheckSum_ins2", p, commandType: CommandType.StoredProcedure);
-        }
+			// call the stored procedure
+			using IDbConnection db = new SqlConnection(ConnectionString);
+			db.Execute("dbo.spCheckSum_ins2", p, commandType: CommandType.StoredProcedure);
+		}
 
 
 		public static (DateTime CreateDateTime, string sCreateDateTime) ImageEXIF(FileInfo fileInfo)
@@ -500,14 +603,17 @@ namespace DupesMaint2
 			Serilog.Log.Logger = new LoggerConfiguration()
 				.MinimumLevel.Debug()
 				.WriteTo.Console()
-				.WriteTo.File("./Logs/DupesMaint2-.log", rollingInterval: RollingInterval.Day, flushToDiskInterval: TimeSpan.FromMilliseconds(100))
+				.WriteTo.File("./Logs/DupesMaint2-.log", rollingInterval: RollingInterval.Day, flushToDiskInterval: TimeSpan.FromSeconds(5))
 				.CreateLogger();
 
 			// Ensure the log promintently shows the database being used
 			var CnStr = new SqlConnectionStringBuilder(ConnectionString);
-			Serilog.Log.Information(new String('-', 50));
-			Serilog.Log.Information($"DupesMaint2 - starting using DATABASE: {CnStr.InitialCatalog.ToUpper()}");
-			Serilog.Log.Information(new String('-', 50));
+
+			// Log the assembly version number
+			string assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version.ToString();
+			Serilog.Log.Information(new String('=', 60));
+			Serilog.Log.Information($"DupesMaint2 v{assemblyVersion} - starting using DATABASE: {CnStr.InitialCatalog.ToUpper()}");
+			Serilog.Log.Information(new String('=', 60));
 		}
 
 		private static Stream GetStream(FileInfo fileInfo)
@@ -516,7 +622,9 @@ namespace DupesMaint2
 			{
 				return fileInfo.OpenRead();
 			}
-			throw new FileNotFoundException($"{fileInfo.FullName}");
+
+			throw new FileNotFoundException(fileInfo.FullName);
 		}
+
 	}
 }

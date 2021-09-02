@@ -18,7 +18,9 @@ namespace DupesMaint2.Models
         }
 
         public virtual DbSet<CheckSum> CheckSums { get; set; }
-        public virtual DbSet<CheckSumDup> CheckSumDups { get; set; }
+        public virtual DbSet<CheckSumDups> CheckSumDups { get; set; }
+
+        public virtual DbSet<dupOnHash> dupOnHashes { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
@@ -92,9 +94,9 @@ namespace DupesMaint2.Models
                 entity.HasKey(e => e.Id);
             });
 
-            modelBuilder.Entity<CheckSumDup>(entity =>
+            modelBuilder.Entity<CheckSumDups>(entity =>
             {
-                entity.ToTable("CheckSumDup");
+                entity.ToTable("CheckSumDups");
 
                 entity.Property(e => e.Id);
 
@@ -122,6 +124,8 @@ namespace DupesMaint2.Models
                     .HasDefaultValueSql("('N')")
                     .IsFixedLength(true);
             });
+
+            modelBuilder.Entity<dupOnHash>().HasNoKey();
 
             OnModelCreatingPartial(modelBuilder);
         }
