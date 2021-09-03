@@ -1,10 +1,11 @@
-﻿using System.Collections.Generic;
+﻿using System;
 using System.CommandLine;
 using System.CommandLine.Invocation;
-using System.CommandLine.Binding;
 using System.CommandLine.Parsing;
-using System.CommandLine.Suggestions;
 using System.IO;
+using Microsoft.Extensions.DependencyInjection;
+using Serilog;
+using System.ComponentModel;
 
 namespace DupesMaint2
 {
@@ -112,7 +113,7 @@ namespace DupesMaint2
 			#endregion
 
 
-			// Command6 - calculate and store up to 3 percuptual hashes in the CheckSum table
+			// Command6 - CheckSumDups insert or update based on hash from CheckSum
 			#region "subcommand6 CheckSumDups insert or update based on hash from CheckSum"
 			Command command6 = new ("FindDupsUsingHash", "CheckSumDups insert or update based on hash from CheckSum.")
 			{
@@ -130,11 +131,22 @@ namespace DupesMaint2
 			rootCommand.AddCommand(command6);
 			#endregion
 
+
+			// Command7 - Tester
+			#region "subcommand7 Tester
+			Command command7 = new("Tester", "Tester")
+			{
+			};
+			command7.Handler = CommandHandler.Create(() => { var hL = new HelperLib();  hL.Tester(); });
+			rootCommand.AddCommand(command7);
+			#endregion
+
 			HelperLib.SerilogSetup();
 
 			// call the method defined in the handler
 			return rootCommand.InvokeAsync(args).Result;
 		}
+
 
 	}
 }

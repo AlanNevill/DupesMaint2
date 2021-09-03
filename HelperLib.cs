@@ -1,6 +1,8 @@
-﻿using Serilog;
+﻿using Microsoft.Extensions.Configuration;
+using Serilog;
 using System;
 using System.Configuration;
+using System.Collections.Specialized;
 using System.Data.SqlClient;
 using DupesMaint2.Models;
 using System.IO;
@@ -18,9 +20,25 @@ using System.Data.Common;
 
 namespace DupesMaint2
 {
-	static public class HelperLib
+	public class HelperLib
 	{
-		public static readonly string ConnectionString = @"data source=SNOWBALL\MSSQLSERVER01;initial catalog=POPS;integrated security=True;MultipleActiveResultSets=True";
+		private static readonly IConfiguration _config;
+		public static string ConnectionString => _config.GetValue<string>("PopsDB");
+
+		static HelperLib()
+        {
+			var builder = new ConfigurationBuilder();
+			BuildConfig(builder);
+
+			Log.Logger = new LoggerConfiguration()
+				.ReadFrom.Configuration(builder.Build())
+				.Enrich.FromLogContext()
+				.WriteTo.Console()
+				.CreateLogger();
+
+			 _config = builder.Build();
+		}
+
 		//public static string ConnectionString => ConfigurationManager.ConnectionStrings["PopsDB"].ConnectionString;
 
 		static readonly List<FileExtensionTypes> fileExtensionTypes = new()
@@ -209,25 +227,39 @@ namespace DupesMaint2
 
 		}
 
+
+		// TODO: Fix this command - see https://docs.microsoft.com/en-us/troubleshoot/dotnet/csharp/store-custom-information-config-file
+		internal void Tester()
+        {
+			var connectioString = _config.GetValue<string>("PopsDB");
+			//var appSettings = ConfigurationManager.AppSettings;
+			//string sAttr = ConfigurationManager.AppSettings.Get("PopsDB");
+			Serilog.Log.Information($"connectioString: {connectioString}\nConnectionString: {ConnectionString}");
+		}
+
 		public static void FindDupsUsingHash(string hash, bool verbose)
 		{
 			PopsDbContext popsDbContext = new PopsDbContext();
 			string hashToUse = string.Empty;
+			string sqlRaw = string.Empty;
 			int processedCount = 0, insertCount = 0, updateCount = 0;
+
 			switch (hash.ToLower())
 			{
 				case "average":
 					hashToUse = "AverageHash";
+					sqlRaw = $"select Id, SHA, {hashToUse}, null as DifferenceHash, null as PerceptualHash from CheckSum where {hashToUse} in (select {hashToUse} from CheckSum group by {hashToUse} having count(*) > 1)";
 					break;
 				case "difference":
 					hashToUse = "DifferenceHash";
+					sqlRaw = $"select Id, SHA, null as AverageHash, {hashToUse}, null as PerceptualHash from CheckSum where {hashToUse} in (select {hashToUse} from CheckSum group by {hashToUse} having count(*) > 1)";
 					break;
 				case "perceptual":
 					hashToUse = "PerceptualHash";
+					sqlRaw = $"select Id, SHA, null as AverageHash, null as DifferenceHash, {hashToUse} from CheckSum where {hashToUse} in (select {hashToUse} from CheckSum group by {hashToUse} having count(*) > 1)";
 					break;
 			}
 
-			string sqlRaw = $"select Id, SHA, {hashToUse} from CheckSum where {hashToUse} in (select {hashToUse} from CheckSum group by {hashToUse} having count(*) > 1)";
 			Serilog.Log.Information($"FindDupsUsingHash - Starting\n\thash: {hash} - {hashToUse}\n\tverbose: {verbose}\n\tsqlRaw: {sqlRaw}\n");
 			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
@@ -253,7 +285,7 @@ namespace DupesMaint2
 				}
 			}
 
-			// update the database table CheckSumDups
+			// update the database table CheckSumDups. NB. This only works for entities loaded as DBset type
 			popsDbContext.SaveChanges();
 
 			_stopwatch.Stop();
@@ -272,7 +304,9 @@ namespace DupesMaint2
 						CheckSumId = checkSum.Id,
 						DupBasedOn = hashToUse,
 						Sha = checkSum.Sha,
-						AverageHash = checkSum.AverageHash
+						AverageHash = (checkSum.AverageHash is null) ? null : checkSum.AverageHash,
+						DifferenceHash = (checkSum.DifferenceHash is null) ? null : checkSum.DifferenceHash,
+						PerceptualHash = (checkSum.PerceptualHash is null) ? null : checkSum.PerceptualHash,
 					};
 					checkSumDups.Add(checkSumDup1);
 					insertCount++;
@@ -282,9 +316,20 @@ namespace DupesMaint2
 						Serilog.Log.Information($"FindDupsUsingHash - Added new CheckSumDup, checkSum.Id: {checkSum.Id}.");
 					}
 				}
-				else     // need to update an existing CheckSumDups row
+				else     // need to update an existing CheckSumDup row
 				{
-					checkSumDup.AverageHash = checkSum.AverageHash;
+					switch (hash.ToLower())
+					{
+						case "average":
+							checkSumDup.AverageHash = checkSum.AverageHash;
+							break;
+						case "difference":
+							checkSumDup.DifferenceHash = checkSum.DifferenceHash;
+							break;
+						case "perceptual":
+							checkSumDup.PerceptualHash = checkSum.PerceptualHash;
+							break;
+					}
 					updateCount++;
 					if (verbose)
 					{
@@ -603,6 +648,7 @@ namespace DupesMaint2
 		{
 			// Serilog setup
 			Serilog.Log.Logger = new LoggerConfiguration()
+				.Enrich.FromLogContext()
 				.MinimumLevel.Debug()
 				.WriteTo.Console()
 				.WriteTo.File("./Logs/DupesMaint2-.log", rollingInterval: RollingInterval.Day, flushToDiskInterval: TimeSpan.FromSeconds(5))
@@ -626,6 +672,12 @@ namespace DupesMaint2
 			}
 
 			throw new FileNotFoundException(fileInfo.FullName);
+		}
+		static void BuildConfig(IConfigurationBuilder builder)
+		{
+			builder.SetBasePath(System.IO.Directory.GetCurrentDirectory())
+				.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+				.AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json", optional: true);
 		}
 
 	}

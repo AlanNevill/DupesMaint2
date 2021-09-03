@@ -61,7 +61,7 @@ Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
 
 
 
-## Subcommand anExif
+## Subcommand3 anExif
 
 Extracts all EXIF data from a JPG image to the console and log.
 
@@ -76,7 +76,7 @@ Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
 
 
 
-## Subcommand deleteDups
+## Subcommand4 deleteDups
 
 Process the duplicate rows in the POPS.CheckSum table and report files to delete or report AND delete.
 
@@ -91,6 +91,56 @@ Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
 `./DupesMaint2 deleteDups`
 
 `./DupesMaint2 deleteDups --delete true`
+
+
+
+## Subcommand5  CalculateHashes
+
+Calculate and store up to 3 perceptual hashes in the CheckSum table.
+
+### --averageHash	true/<u>false</u>
+
+Calculate the AverageHash column.
+
+### --differenceHash	true/<u>false</u>
+
+Calculate the DifferenceHash column.
+
+### --perceptualHash	true/<u>false</u>
+
+Calculate the PerceptualHash column.
+
+### --verbose	true/<u>false</u>
+
+Verbose logging.
+
+### Usage
+
+Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
+
+`./DupesMaint2 CalculateHashes --averageHash true --differenceHash false --perceptualHash false`
+
+`./DupesMaint2 CalculateHashes --averageHash true`
+
+
+
+## Subcommand6 FindDupsUsingHash
+
+CheckSumDups insert or update based on hash column from CheckSum table.
+
+### --hash	 FromAmong("average","difference","perceptual")
+
+Select which hash column to use.
+
+### --verbose	true/<u>false</u>
+
+Verbose logging.
+
+### Usage
+
+Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
+
+`./dupesmaint2 FindDupsUsingHash --hash average`
 
 
 
