@@ -1,6 +1,8 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Console;
 
 #nullable disable
 
@@ -8,6 +10,9 @@ namespace DupesMaint2.Models
 {
     public partial class PopsDbContext : DbContext
     {
+        //static LoggerFactory object
+        public static readonly ILoggerFactory MyLoggerFactory = LoggerFactory.Create(builder => { builder.AddConsole(); });
+
         public PopsDbContext()
         {
         }
@@ -24,6 +29,11 @@ namespace DupesMaint2.Models
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
+            // TODO: used to enable console logging of SQL commands issued by DBcontext
+/*            optionsBuilder.UseLoggerFactory(MyLoggerFactory)  //tie-up DbContext with LoggerFactory object
+                .EnableSensitiveDataLogging()
+                .UseSqlServer(@"Server=SNOWBALL\MSSQLSERVER01;Database=Pops;Trusted_Connection=True;");
+*/
             if (!optionsBuilder.IsConfigured)
             {
                 optionsBuilder.UseSqlServer(HelperLib.ConnectionString);

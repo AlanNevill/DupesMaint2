@@ -184,7 +184,7 @@ namespace DupesMaint2
 			popsDbContext.SaveChanges();
 
 			_stopwatch.Stop();
-			Serilog.Log.Information($"CalculateHashes - Total execution time: {_stopwatch.Elapsed.Minutes:N1} mins.\n.{new String('-', 150)}");
+			Serilog.Log.Information($"CalculateHashes - Total execution time: {_stopwatch.Elapsed.TotalMinutes:N0} mins.\n{new String('-', 150)}");
 
 			////////////////
 			// local methods
@@ -213,7 +213,7 @@ namespace DupesMaint2
 		{
 			PopsDbContext popsDbContext = new PopsDbContext();
 			string hashToUse = string.Empty;
-			int processedCount = 0;
+			int processedCount = 0, insertCount = 0, updateCount = 0;
 			switch (hash.ToLower())
 			{
 				case "average":
@@ -227,20 +227,20 @@ namespace DupesMaint2
 					break;
 			}
 
-			string sqlRaw = $"select Id, SHA, {hashToUse} from CheckSum where {hashToUse} in (select {hashToUse} from CheckSum where {hashToUse} is not null group by {hashToUse} having count(*) > 1) order by {hashToUse}";
+			string sqlRaw = $"select Id, SHA, {hashToUse} from CheckSum where {hashToUse} in (select {hashToUse} from CheckSum group by {hashToUse} having count(*) > 1)";
 			Serilog.Log.Information($"FindDupsUsingHash - Starting\n\thash: {hash} - {hashToUse}\n\tverbose: {verbose}\n\tsqlRaw: {sqlRaw}\n");
 			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-			var checkSumDups = popsDbContext.CheckSumDups.ToList();
-			Serilog.Log.Information($"FindDupsUsingHash - Loaded checkSumDups.Count: {checkSumDups.Count:N0}");
+			var checkSumDups = popsDbContext.CheckSumDups;
+			Serilog.Log.Information($"FindDupsUsingHash - Loaded table checkSumDups.Count: {checkSumDups.LongCount():N0}");
 
-			var dupOnhashes = popsDbContext.dupOnHashes.FromSqlRaw(sqlRaw).ToList();
-			if (dupOnhashes.Count == 0)
+			var dupOnhashes = popsDbContext.dupOnHashes.FromSqlRaw(sqlRaw);
+			if (dupOnhashes.LongCount() == 0)
 			{
 				Serilog.Log.Warning($"FindDupsUsingHash - No duplicates found based on hash: {hashToUse}\n.{new String('-', 150)}");
 				return;
 			}
-			Serilog.Log.Information($"FindDupsUsingHash - Loaded dupOnhashes.Count: {dupOnhashes.Count:N0}");
+			Serilog.Log.Information($"FindDupsUsingHash - Loaded view model dupOnhashes.Count: {dupOnhashes.LongCount():N0}");
 
 			// Process the list of duplicates found in CheckSum table
 			foreach (var dupOnHash in dupOnhashes)
@@ -249,22 +249,22 @@ namespace DupesMaint2
 
 				if (++processedCount % 1000 == 0)
 				{
-					Serilog.Log.Information($"FindDupsUsingHash - {processedCount,6:N0}. Completed:{((processedCount * 100) / dupOnhashes.Count),3:N0}%.");
+					Serilog.Log.Information($"FindDupsUsingHash - {processedCount,6:N0}. Completed:{((processedCount * 100) / dupOnhashes.LongCount()),3:N0}%.");
 				}
 			}
 
-			// update the database
+			// update the database table CheckSumDups
 			popsDbContext.SaveChanges();
 
 			_stopwatch.Stop();
-			Serilog.Log.Information($"FindDupsUsingHash - Total execution time: {_stopwatch.Elapsed.Seconds:N0} secs.\n.{new String('-', 150)}");
+			Serilog.Log.Information($"FindDupsUsingHash - insertCount: {insertCount:N0}, updateCount: {updateCount:N0}, checkSumDups.Count: {checkSumDups.LongCount():N0}, execution time: {_stopwatch.Elapsed.TotalSeconds:N0} secs.\n{new String('-', 150)}");
 
 			////////////////
 			// local methods
 			////////////////
 			void CheckSumDup_upsert(dupOnHash checkSum)
 			{
-				var checkSumDup = checkSumDups.Find(e => e.CheckSumId == checkSum.Id);
+				var checkSumDup = checkSumDups.Where(e => e.CheckSumId == checkSum.Id).FirstOrDefault();
 				if (checkSumDup is null)    // need to insert a new CheckSumDups row
 				{
 					CheckSumDups checkSumDup1 = new()
@@ -275,6 +275,7 @@ namespace DupesMaint2
 						AverageHash = checkSum.AverageHash
 					};
 					checkSumDups.Add(checkSumDup1);
+					insertCount++;
 
 					if (verbose)
 					{
@@ -284,6 +285,7 @@ namespace DupesMaint2
 				else     // need to update an existing CheckSumDups row
 				{
 					checkSumDup.AverageHash = checkSum.AverageHash;
+					updateCount++;
 					if (verbose)
 					{
 						Serilog.Log.Information($"FindDupsUsingHash - Updated existing CheckSumDup, checkSum.Id: {checkSumDup.Id}, checkSumDup.CheckSumId: {checkSumDup.CheckSumId}.");
