@@ -6,6 +6,7 @@ using System.IO;
 using Microsoft.Extensions.DependencyInjection;
 using Serilog;
 using System.ComponentModel;
+using System.CommandLine.Builder;
 
 namespace DupesMaint2
 {
@@ -19,65 +20,41 @@ namespace DupesMaint2
 
 			RootCommand rootCommand = new RootCommand("DupesMaintConsole")
 				{
-					new Option("--folder", "The root folder of the tree to scan which must exist, 'F:/Picasa backup/c/photos'.")
-						{
-							Argument = new Argument<DirectoryInfo>().ExistingOnly(),
-							IsRequired = true
-						},
-
-					new Option("--replace", "Replace default (true) or append (false) to the db tables CheckSum & CheckSumDupes.")
-						{
-							Argument = new Argument<bool>(getDefaultValue: () => true),
-							IsRequired = false
-						}
-
+					new Option<DirectoryInfo>("--folder", "The root folder of the tree to scan which must exist, 'F:/Picasa backup/c/photos'.").ExistingOnly(),
+					new Option<bool>("--replace", getDefaultValue: () => true,  "Replace default (true) or append (false) to the db tables CheckSum & CheckSumDupes.") {IsRequired = false }
 				};
 			// setup the root command handler
 			rootCommand.Handler = CommandHandler.Create((DirectoryInfo folder, bool replace) => { HelperLib.Process(folder, replace); });
+
 
 			// sub command to extract EXIF date/time from all JPG image files in a folder tree
 			#region "subcommand2 EXIF"
 			Command command2 = new Command("EXIF", "extract EXIF date/time from all JPG image files in a folder tree")
 			{
-				new Option("--folder", "The root folder to scan image file, 'C:\\Users\\User\\OneDrive\\Photos")
-					{
-						Argument = new Argument<DirectoryInfo>().ExistingOnly(),
-						IsRequired = true,
-					},
-
-				new Option("--replace", "Replace default (true) or append (false) to the db tables CheckSum.")
-					{
-						Argument = new Argument<bool>(getDefaultValue: () => true),
-						IsRequired = true,
-					}
+				new Option<DirectoryInfo>("--folder", "The root folder to scan image file, 'C:\\Users\\User\\OneDrive\\Photos").ExistingOnly(),
+				new Option<bool>("--replace", getDefaultValue: () => true, "Replace default (true) or append (false) to the db tables CheckSum."){ IsRequired = true }
 			};
 			command2.Handler = CommandHandler.Create((DirectoryInfo folder, bool replace) => {HelperLib.ProcessEXIF(folder, replace); });
 			rootCommand.AddCommand(command2);
 			#endregion
 
+
 			// Command3 - Log the EXIF directories for a photo or video media file
 			#region "subcommand3 anEXIF"
 			Command command3 = new Command("anEXIF","Log the EXIF data from a single file.")
 			{
-				new Option("--image", "An image file, 'C:\\Users\\User\\OneDrive\\Photos\\2013\\02\\2013-02-24 12.34.54-3.jpg'")
-					{
-						Argument = new Argument<FileInfo>().ExistingOnly(),
-						IsRequired = true,
-					}
+				new Option<FileInfo>("--image", "An image file, 'C:\\Users\\User\\OneDrive\\Photos\\2013\\02\\2013-02-24 12.34.54-3.jpg'").ExistingOnly()
 			};
 			command3.Handler = CommandHandler.Create((FileInfo image) => {HelperLib.ProcessAnEXIF(image); });
 			rootCommand.AddCommand(command3);
 			#endregion
 
+
 			// Command4 - Delete duplicates
 			#region "subcommand4 deleteDups"
 			Command command4 = new Command("deleteDups","Delete the duplicate files.")
 			{
-				new Option("--delete", "Replace default (true) or append (false) to the db tables CheckSum.")
-					{
-						Argument = new Argument<bool>(getDefaultValue: () => false),
-						IsRequired = true,
-					}
+				new Option<bool>("--delete", getDefaultValue: () => false, "Replace default (true) or append (false) to the db tables CheckSum.") { IsRequired = true }
 			};
 			command4.Handler = CommandHandler.Create((bool delete) => {HelperLib.DeleteDupes(delete); });
 			rootCommand.AddCommand(command4);
@@ -88,25 +65,10 @@ namespace DupesMaint2
 			#region "subcommand5 CalculateHashes"
 			Command command5 = new ("CalculateHashes", "Calculate and store up to 3 perceptual hashes in the CheckSum table.")
 			{
-				new Option("--averageHash", "Calculate the AverageHash.")
-					{
-						Argument = new Argument<bool>(getDefaultValue: () => false),
-						IsRequired = true,
-					},
-				new Option("--differenceHash", "Calculate the DifferenceHash.")
-					{
-						Argument = new Argument<bool>(getDefaultValue: () => false),
-						IsRequired = true,
-					},
-				new Option("--perceptualHash", "Calculate the PerceptualHash.")
-					{
-						Argument = new Argument<bool>(getDefaultValue: () => false),
-						IsRequired = true,
-					},
-				new Option("--verbose", "Verbose logging.")
-					{
-						Argument = new Argument<bool>(getDefaultValue: () => false)
-					}
+				new Option<bool>("--averageHash", getDefaultValue: () => false, "Calculate the AverageHash.") { IsRequired = true },
+				new Option<bool>("--differenceHash", getDefaultValue: () => false, "Calculate the DifferenceHash.") { IsRequired = true },
+				new Option<bool>("--perceptualHash", getDefaultValue: () => false, "Calculate the PerceptualHash.") { IsRequired = true },
+				new Option<bool>("--verbose", getDefaultValue: () => false, "Verbose logging.")
 			};
 			command5.Handler = CommandHandler.Create((bool averageHash, bool differenceHash, bool perceptualHash, bool verbose) => { HelperLib.CalculateHashes(averageHash, differenceHash, perceptualHash, verbose); });
 			rootCommand.AddCommand(command5);
@@ -117,15 +79,8 @@ namespace DupesMaint2
 			#region "subcommand6 CheckSumDups insert or update based on hash from CheckSum"
 			Command command6 = new ("FindDupsUsingHash", "CheckSumDups insert or update based on hash from CheckSum.")
 			{
-				new Option("--hash", "Hash to use average, difference, perceptual.")
-					{
-						Argument = new Argument<string>().FromAmong("average","difference","perceptual"),
-						IsRequired = true,						
-					},
-				new Option("--verbose", "Verbose logging.")
-					{
-						Argument = new Argument<bool>(getDefaultValue: () => false)
-					}
+				new Option<string>("--hash", "Hash to use average, difference, perceptual.").FromAmong("average", "difference", "perceptual"),
+				new Option<bool>("--verbose", getDefaultValue: () => false, "Verbose logging.")
 			};
 			command6.Handler = CommandHandler.Create((string hash, bool verbose) => { HelperLib.FindDupsUsingHash(hash, verbose); });
 			rootCommand.AddCommand(command6);
@@ -136,15 +91,21 @@ namespace DupesMaint2
 			#region "subcommand7 Tester
 			Command command7 = new("Tester", "Tester")
 			{
+				new Option<bool>("--verbose", getDefaultValue: () =>false, "Verbose logging.")
+				.AddSuggestions("true","false")	// TODO: not working. Might need newer version of CommandLine
 			};
 			command7.Handler = CommandHandler.Create(() => { var hL = new HelperLib();  hL.Tester(); });
 			rootCommand.AddCommand(command7);
 			#endregion
 
-			HelperLib.SerilogSetup();
+
+			// set up common functionality like --help, --version, and dotnet-suggest support
+			var commandLine = new CommandLineBuilder(rootCommand)
+				.UseDefaults() // automatically configures dotnet-suggest
+				.Build();
 
 			// call the method defined in the handler
-			return rootCommand.InvokeAsync(args).Result;
+			return commandLine.InvokeAsync(args).Result;
 		}
 
 

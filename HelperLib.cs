@@ -25,22 +25,31 @@ namespace DupesMaint2
 		private static readonly IConfiguration _config;
 		public static string ConnectionString => _config.GetValue<string>("PopsDB");
 
+		// constructor
 		static HelperLib()
         {
 			var builder = new ConfigurationBuilder();
 			BuildConfig(builder);
+			_config = builder.Build();
 
 			Log.Logger = new LoggerConfiguration()
-				.ReadFrom.Configuration(builder.Build())
+				.ReadFrom.Configuration(_config)
 				.Enrich.FromLogContext()
 				.WriteTo.Console()
+				.WriteTo.File("./Logs/DupesMaint2-.log", rollingInterval: RollingInterval.Day, flushToDiskInterval: TimeSpan.FromSeconds(10))
 				.CreateLogger();
 
-			 _config = builder.Build();
+			// Ensure the log promintently shows the database being used
+			var CnStr = new SqlConnectionStringBuilder(ConnectionString);
+
+			// Log the assembly version number
+			string assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version.ToString();
+			Serilog.Log.Information(new String('=', 60));
+			Serilog.Log.Information($"DupesMaint2 v{assemblyVersion} - starting using DATABASE: {CnStr.InitialCatalog.ToUpper()}");
+			Serilog.Log.Information(new String('=', 60));
 		}
 
-		//public static string ConnectionString => ConfigurationManager.ConnectionStrings["PopsDB"].ConnectionString;
-
+		// map for file extensions to media group
 		static readonly List<FileExtensionTypes> fileExtensionTypes = new()
 		{
 			new FileExtensionTypes { Type = ".3GP", Group = "Video" },
@@ -67,7 +76,7 @@ namespace DupesMaint2
 			new FileExtensionTypes { Type = ".WEBP", Group = "Photo" },
 		};
 
-		// list of file type extensions that can be hashed
+		// list of file extensions that can be hashed by the library
 		static readonly List<FileExtensionTypes> fileExtensionTypes2Hashing = new()
 		{
 			new FileExtensionTypes { Type = ".BMP", Group = "Photo" },
@@ -228,13 +237,10 @@ namespace DupesMaint2
 		}
 
 
-		// TODO: Fix this command - see https://docs.microsoft.com/en-us/troubleshoot/dotnet/csharp/store-custom-information-config-file
 		internal void Tester()
         {
 			var connectioString = _config.GetValue<string>("PopsDB");
-			//var appSettings = ConfigurationManager.AppSettings;
-			//string sAttr = ConfigurationManager.AppSettings.Get("PopsDB");
-			Serilog.Log.Information($"connectioString: {connectioString}\nConnectionString: {ConnectionString}");
+			Serilog.Log.Information($"\tconnectionString: {connectioString}\n\t\tConnectionString: {ConnectionString}");
 		}
 
 		public static void FindDupsUsingHash(string hash, bool verbose)
@@ -647,12 +653,12 @@ namespace DupesMaint2
 		public static void SerilogSetup()
 		{
 			// Serilog setup
-			Serilog.Log.Logger = new LoggerConfiguration()
-				.Enrich.FromLogContext()
-				.MinimumLevel.Debug()
-				.WriteTo.Console()
-				.WriteTo.File("./Logs/DupesMaint2-.log", rollingInterval: RollingInterval.Day, flushToDiskInterval: TimeSpan.FromSeconds(5))
-				.CreateLogger();
+			//Serilog.Log.Logger = new LoggerConfiguration()
+			//	.Enrich.FromLogContext()
+			//	.MinimumLevel.Debug()
+			//	.WriteTo.Console()
+			//	.WriteTo.File("./Logs/DupesMaint2-.log", rollingInterval: RollingInterval.Day, flushToDiskInterval: TimeSpan.FromSeconds(5))
+			//	.CreateLogger();
 
 			// Ensure the log promintently shows the database being used
 			var CnStr = new SqlConnectionStringBuilder(ConnectionString);
