@@ -29,7 +29,11 @@ namespace DupesMaint2
 		static HelperLib()
         {
 			var builder = new ConfigurationBuilder();
-			BuildConfig(builder);
+			builder.SetBasePath(System.IO.Directory.GetCurrentDirectory())
+				.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+				.AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json", optional: true);
+
+			//BuildConfig(builder);
 			_config = builder.Build();
 
 			Log.Logger = new LoggerConfiguration()
@@ -679,12 +683,14 @@ namespace DupesMaint2
 
 			throw new FileNotFoundException(fileInfo.FullName);
 		}
-		static void BuildConfig(IConfigurationBuilder builder)
+
+
+/*		static void BuildConfig(IConfigurationBuilder builder)
 		{
 			builder.SetBasePath(System.IO.Directory.GetCurrentDirectory())
 				.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
 				.AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json", optional: true);
 		}
-
+*/
 	}
 }

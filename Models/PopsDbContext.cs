@@ -10,7 +10,7 @@ namespace DupesMaint2.Models
 {
     public partial class PopsDbContext : DbContext
     {
-        //static LoggerFactory object
+        // TODO: static LoggerFactory object for logging SQL commands to the console
         public static readonly ILoggerFactory MyLoggerFactory = LoggerFactory.Create(builder => { builder.AddConsole(); });
 
         public PopsDbContext()
@@ -26,6 +26,8 @@ namespace DupesMaint2.Models
         public virtual DbSet<CheckSumDups> CheckSumDups { get; set; }
 
         public virtual DbSet<dupOnHash> dupOnHashes { get; set; }
+
+        public virtual DbSet<CheckSumDups_HashCount> CheckSumDups_HashCount { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {

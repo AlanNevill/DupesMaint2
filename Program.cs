@@ -18,10 +18,12 @@ namespace DupesMaint2
 			// see https://github.com/dotnet/command-line-api/wiki/Your-first-app-with-System.CommandLine
 			// PM> Install-Package System.CommandLine -Version 2.0.0-beta1.20104.2
 
+			// Using Arity example:  new Option("--sport", argument: new Argument<string> { Arity = ArgumentArity.ExactlyOne })
+
 			RootCommand rootCommand = new RootCommand("DupesMaintConsole")
 				{
 					new Option<DirectoryInfo>("--folder", "The root folder of the tree to scan which must exist, 'F:/Picasa backup/c/photos'.").ExistingOnly(),
-					new Option<bool>("--replace", getDefaultValue: () => true,  "Replace default (true) or append (false) to the db tables CheckSum & CheckSumDupes.") {IsRequired = false }
+					new Option<bool>("--replace", getDefaultValue: () => true,  "Replace default (true) or append (false) to the db tables CheckSum & CheckSumDupes.") {IsRequired = false } 
 				};
 			// setup the root command handler
 			rootCommand.Handler = CommandHandler.Create((DirectoryInfo folder, bool replace) => { HelperLib.Process(folder, replace); });
@@ -92,7 +94,7 @@ namespace DupesMaint2
 			Command command7 = new("Tester", "Tester")
 			{
 				new Option<bool>("--verbose", getDefaultValue: () =>false, "Verbose logging.")
-				.AddSuggestions("true","false")	// TODO: not working. Might need newer version of CommandLine
+					.AddSuggestions("true","false")
 			};
 			command7.Handler = CommandHandler.Create(() => { var hL = new HelperLib();  hL.Tester(); });
 			rootCommand.AddCommand(command7);
