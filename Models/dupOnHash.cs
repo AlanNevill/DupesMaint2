@@ -2,14 +2,12 @@
 
 namespace DupesMaint2.Models
 {
-#nullable enable
+#nullable disable
 
-    public partial class dupOnHash
+    public partial class DupOnHash
     {
-        public int Id { get; set; }
-        public string Sha { get; set; }
-        public decimal? AverageHash { get; set; }
-        public decimal? DifferenceHash { get; set; }
-        public decimal? PerceptualHash { get; set; }
+        public int CheckSumId { get; set; }
+        public string DupBasedOn { get; set; }
+        public string BasedOnVal { get; set; }
     }
 }

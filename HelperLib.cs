@@ -241,121 +241,146 @@ namespace DupesMaint2
 		}
 
 
-		internal void Tester()
+		public void Tester()
         {
-			var connectioString = _config.GetValue<string>("PopsDB");
-			Serilog.Log.Information($"\tconnectionString: {connectioString}\n\t\tConnectionString: {ConnectionString}");
+			//var connectioString = _config.GetValue<string>("PopsDB");
+			//Serilog.Log.Information($"\tconnectionString: {connectioString}\n\t\tConnectionString: {ConnectionString}");
+
+			using (PopsDbContext popsDbContext = new())
+			{
+				CheckSumDupsBasedOn checkSumDupsBasedOn = new()
+				{
+
+					CheckSumId = -2,
+					DupBasedOn = "Test -1",
+					BasedOnVal = "Test -1",
+				};
+
+				CheckSumDups checkSumDups = new()
+				{
+					CheckSumId = -2,
+					DupBasedOn = "test",
+					ToDelete = "N",
+				};
+
+
+				checkSumDups.CheckSumDupsBasedOnRows.Add(checkSumDupsBasedOn);
+					//new CheckSumDupsBasedOn
+					//{
+					//	CheckSumId = checkSumDups.Id,
+					//	DupBasedOn = "Test -1",
+					//	BasedOnVal = "Test -1",
+					//	CheckSumDupsCheckSumId = -1
+					//});
+
+				popsDbContext.Add(checkSumDups);
+				popsDbContext.SaveChanges();
+			}
 		}
 
 		public static void FindDupsUsingHash(string hash, bool verbose)
 		{
-			PopsDbContext popsDbContext = new PopsDbContext();
-			string hashToUse = string.Empty;
-			string sqlRaw = string.Empty;
-			int processedCount = 0, insertCount = 0, updateCount = 0;
+			PopsDbContext popsDbContext = new ();
+			//string hashToUse = string.Empty;
+			string sqlRaw = $"select Id as CheckSumId, '{hash}' as DupBasedOn, cast({hash} as varchar(200)) as BasedOnVal, null as CheckSumDupsId from CheckSum as CheckSumDupsBasedOn where {hash} in (select {hash} from CheckSum group by {hash} having count(*) > 1)";
+			int processedCount = 0, insertCheckSumDupsCount = 0, updateCheckSumDupsBasedOnCount = 0;
 
-			switch (hash.ToLower())
-			{
-				case "average":
-					hashToUse = "AverageHash";
-					sqlRaw = $"select Id, SHA, {hashToUse}, null as DifferenceHash, null as PerceptualHash from CheckSum where {hashToUse} in (select {hashToUse} from CheckSum group by {hashToUse} having count(*) > 1)";
-					break;
-				case "difference":
-					hashToUse = "DifferenceHash";
-					sqlRaw = $"select Id, SHA, null as AverageHash, {hashToUse}, null as PerceptualHash from CheckSum where {hashToUse} in (select {hashToUse} from CheckSum group by {hashToUse} having count(*) > 1)";
-					break;
-				case "perceptual":
-					hashToUse = "PerceptualHash";
-					sqlRaw = $"select Id, SHA, null as AverageHash, null as DifferenceHash, {hashToUse} from CheckSum where {hashToUse} in (select {hashToUse} from CheckSum group by {hashToUse} having count(*) > 1)";
-					break;
-			}
-
-			Serilog.Log.Information($"FindDupsUsingHash - Starting\n\thash: {hash} - {hashToUse}\n\tverbose: {verbose}\n\tsqlRaw: {sqlRaw}\n");
+			Serilog.Log.Information($"FindDupsUsingHash - Starting\n\thash: {hash}\n\tverbose: {verbose}\n\tsqlRaw: {sqlRaw}\n");
 			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-			var checkSumDups = popsDbContext.CheckSumDups;
-			Serilog.Log.Information($"FindDupsUsingHash - Loaded table checkSumDups.Count: {checkSumDups.LongCount():N0}");
+			//var checkSumDups = popsDbContext.CheckSumDups;
+			//Serilog.Log.Information($"FindDupsUsingHash - Loaded table checkSumDups.Count: {checkSumDups.LongCount():N0}");
 
-			var dupOnhashes = popsDbContext.dupOnHashes.FromSqlRaw(sqlRaw);
-			if (dupOnhashes.LongCount() == 0)
+			var dupOnHash = popsDbContext.DupOnHash.FromSqlRaw(sqlRaw);
+			if (dupOnHash.LongCount() == 0)
 			{
-				Serilog.Log.Warning($"FindDupsUsingHash - No duplicates found based on hash: {hashToUse}\n.{new String('-', 150)}");
+				Serilog.Log.Warning($"FindDupsUsingHash - No duplicates found based on hash: {hash}\n.{new String('-', 150)}");
 				return;
 			}
-			Serilog.Log.Information($"FindDupsUsingHash - Loaded view model dupOnhashes.Count: {dupOnhashes.LongCount():N0}");
+			Serilog.Log.Information($"FindDupsUsingHash - Loaded view model dupOnhashes.Count: {dupOnHash.LongCount():N0}");
 
 			// Process the list of duplicates found in CheckSum table
-			foreach (var dupOnHash in dupOnhashes)
+			foreach (var row in dupOnHash)
 			{
-				CheckSumDup_upsert(dupOnHash);
+				CheckSumDup_upsert(row, hash, verbose, ref insertCheckSumDupsCount, ref updateCheckSumDupsBasedOnCount);
 
 				if (++processedCount % 1000 == 0)
 				{
-					Serilog.Log.Information($"FindDupsUsingHash - {processedCount,6:N0}. Completed:{((processedCount * 100) / dupOnhashes.LongCount()),3:N0}%.");
+					Serilog.Log.Information($"FindDupsUsingHash - {processedCount,6:N0}. Completed:{((processedCount * 100) / dupOnHash.LongCount()),3:N0}%.");
 				}
 			}
 
 			// update the database table CheckSumDups. NB. This only works for entities loaded as DBset type
-			popsDbContext.SaveChanges();
+			//popsDbContext.SaveChanges();
 
 			_stopwatch.Stop();
-			Serilog.Log.Information($"FindDupsUsingHash - insertCount: {insertCount:N0}, updateCount: {updateCount:N0}, checkSumDups.Count: {checkSumDups.LongCount():N0}, execution time: {_stopwatch.Elapsed.TotalSeconds:N0} secs.\n{new String('-', 150)}");
-
-			////////////////
-			// local methods
-			////////////////
-			void CheckSumDup_upsert(dupOnHash checkSum)
-			{
-				var checkSumDup = checkSumDups.Where(e => e.CheckSumId == checkSum.Id).FirstOrDefault();
-				if (checkSumDup is null)    // need to insert a new CheckSumDups row
-				{
-					CheckSumDups checkSumDup1 = new()
-					{
-						CheckSumId = checkSum.Id,
-						DupBasedOn = hashToUse,
-						Sha = checkSum.Sha,
-						AverageHash = (checkSum.AverageHash is null) ? null : checkSum.AverageHash,
-						DifferenceHash = (checkSum.DifferenceHash is null) ? null : checkSum.DifferenceHash,
-						PerceptualHash = (checkSum.PerceptualHash is null) ? null : checkSum.PerceptualHash,
-					};
-					checkSumDups.Add(checkSumDup1);
-					insertCount++;
-
-					if (verbose)
-					{
-						Serilog.Log.Information($"FindDupsUsingHash - Added new CheckSumDup, checkSum.Id: {checkSum.Id}.");
-					}
-				}
-				else     // need to update an existing CheckSumDup row
-				{
-					switch (hash.ToLower())
-					{
-						case "average":
-							checkSumDup.AverageHash = checkSum.AverageHash;
-							break;
-						case "difference":
-							checkSumDup.DifferenceHash = checkSum.DifferenceHash;
-							break;
-						case "perceptual":
-							checkSumDup.PerceptualHash = checkSum.PerceptualHash;
-							break;
-					}
-					updateCount++;
-					if (verbose)
-					{
-						Serilog.Log.Information($"FindDupsUsingHash - Updated existing CheckSumDup, checkSum.Id: {checkSumDup.Id}, checkSumDup.CheckSumId: {checkSumDup.CheckSumId}.");
-					}
-				}
-			}
+			Serilog.Log.Information($"FindDupsUsingHash - insertCheckSumDupsCount: {insertCheckSumDupsCount:N0}, updateCheckSumDupsBasedOnCount: {updateCheckSumDupsBasedOnCount:N0}, execution time: {_stopwatch.Elapsed.TotalSeconds:N0} secs.\n{new String('-', 150)}");
 
 		}
 
-		/// <summary>
-		/// Command2 - Process all the files in the folder tree passed in and add rows to CheckSum table
-		/// </summary>
-		/// <param name="folder">DirectoryInfo - root folder to the folder structure.</param>
-		/// <param name="replace">Bool - If True truncate the CheckSum table else add rows.</param>
-		public static void ProcessEXIF(DirectoryInfo folder, bool replace)
+        private static void CheckSumDup_upsert(DupOnHash dupOnHash, string hash, bool verbose, ref int insertCheckSumDupsCount, ref int updateCheckSumDupsBasedOnCount)
+        {
+			PopsDbContext popsDbContext = new ();
+
+			var checkSumDup = popsDbContext.CheckSumDups.Where(e => e.CheckSumId == dupOnHash.CheckSumId).ToList().FirstOrDefault();
+            if (checkSumDup is null)    // need to insert a new CheckSumDups row
+            {
+                CheckSumDups checkSumDup1 = new()
+                {
+                    CheckSumId = dupOnHash.CheckSumId
+                };
+                popsDbContext.CheckSumDups.Add(checkSumDup1);
+                insertCheckSumDupsCount++;
+
+                checkSumDup1.CheckSumDupsBasedOnRows.Add(
+                    new CheckSumDupsBasedOn
+                    {
+                        CheckSumId = checkSumDup1.CheckSumId,
+                        DupBasedOn = hash,
+                        BasedOnVal = dupOnHash.BasedOnVal
+                    });
+
+                if (verbose)
+                {
+                    Serilog.Log.Information($"FindDupsUsingHash - Added new CheckSumDup and CheckSumDupsBasedOn rows, checkSum.Id: {checkSumDup1.CheckSumId}, hash: {hash}.");
+                }
+            }
+            else     // just add the new CheckSumDupsBasedOn row for this CheckSumDup. Delete any existing value first.
+            {
+                // check for existing CheckSumDupsBasedOn row for this CheckSumDup with DupBasedOn = hash
+                if (checkSumDup.CheckSumDupsBasedOnRows.Count > 0)
+                {
+                    var checkSumDupsBasedOn4CheckSumDup = checkSumDup.CheckSumDupsBasedOnRows.Where(e => e.BasedOnVal == hash).FirstOrDefault();
+                    if (checkSumDupsBasedOn4CheckSumDup is not null)
+                    {
+                        popsDbContext.CheckSumDupsBasedOn.Remove(checkSumDupsBasedOn4CheckSumDup);
+                    }
+                }
+
+                checkSumDup.CheckSumDupsBasedOnRows.Add(
+                    new CheckSumDupsBasedOn
+                    {
+                        CheckSumId = dupOnHash.CheckSumId,
+                        DupBasedOn = hash,
+                        BasedOnVal = dupOnHash.BasedOnVal
+                    });
+
+                updateCheckSumDupsBasedOnCount++;
+                if (verbose)
+                {
+                    Serilog.Log.Information($"FindDupsUsingHash - Existing CheckSumDup, checkSum.Id: {checkSumDup.CheckSumId}, added CheckSumDupsBasedOn row with checkSum.Id: {checkSumDup.CheckSumId}, hash: {hash}.");
+                }
+            }
+
+            popsDbContext.SaveChanges();
+        }
+
+        /// <summary>
+        /// Command2 - Process all the files in the folder tree passed in and add rows to CheckSum table
+        /// </summary>
+        /// <param name="folder">DirectoryInfo - root folder to the folder structure.</param>
+        /// <param name="replace">Bool - If True truncate the CheckSum table else add rows.</param>
+        public static void ProcessEXIF(DirectoryInfo folder, bool replace)
 		{
 			int _count = 0;
 			Serilog.Log.Information($"ProcessEXIF: target folder is {folder.FullName}\tTruncate CheckSum is: {replace}.");

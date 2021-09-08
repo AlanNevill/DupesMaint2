@@ -25,17 +25,17 @@ namespace DupesMaint2.Models
         public virtual DbSet<CheckSum> CheckSums { get; set; }
         public virtual DbSet<CheckSumDups> CheckSumDups { get; set; }
 
-        public virtual DbSet<dupOnHash> dupOnHashes { get; set; }
+        public virtual DbSet<DupOnHash> DupOnHash { get; set; }
 
-        public virtual DbSet<CheckSumDups_HashCount> CheckSumDups_HashCount { get; set; }
+        public virtual DbSet<CheckSumDupsBasedOn> CheckSumDupsBasedOn { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
             // TODO: used to enable console logging of SQL commands issued by DBcontext
-/*            optionsBuilder.UseLoggerFactory(MyLoggerFactory)  //tie-up DbContext with LoggerFactory object
-                .EnableSensitiveDataLogging()
-                .UseSqlServer(@"Server=SNOWBALL\MSSQLSERVER01;Database=Pops;Trusted_Connection=True;");
-*/
+            //optionsBuilder.UseLoggerFactory(MyLoggerFactory)  //tie-up DbContext with LoggerFactory object
+            //    .EnableSensitiveDataLogging()
+            //    .UseSqlServer(@"Server=SNOWBALL\MSSQLSERVER01;Database=Pops;Trusted_Connection=True;");
+
             if (!optionsBuilder.IsConfigured)
             {
                 optionsBuilder.UseSqlServer(HelperLib.ConnectionString);
@@ -110,11 +110,7 @@ namespace DupesMaint2.Models
             {
                 entity.ToTable("CheckSumDups");
 
-                entity.Property(e => e.Id);
-
                 entity.HasKey(e => e.Id);
-
-                entity.Property(e => e.CheckSumId);
 
                 entity.Property(e => e.DupBasedOn)
                     .HasMaxLength(20);
@@ -123,7 +119,6 @@ namespace DupesMaint2.Models
                     .HasMaxLength(200)
                     .IsUnicode(false)
                     .HasColumnName("SHA");
-
 
                 entity.Property(e => e.AverageHash).HasColumnType("decimal(20, 0)");
                 entity.Property(e => e.DifferenceHash).HasColumnType("decimal(20, 0)");
@@ -137,7 +132,23 @@ namespace DupesMaint2.Models
                     .IsFixedLength(true);
             });
 
-            modelBuilder.Entity<dupOnHash>().HasNoKey();
+            modelBuilder.Entity<CheckSumDupsBasedOn>(entity =>
+            {
+                entity.ToTable("CheckSumDupsBasedOn");
+
+                entity.HasKey(e => new { e.CheckSumId, e.DupBasedOn});
+
+                entity.Property(e => e.DupBasedOn)
+                    .HasMaxLength(20)
+                    .IsUnicode(false);
+
+                entity.Property(e => e.BasedOnVal)
+                    .HasMaxLength(200)
+                    .IsUnicode(false);
+            });
+
+
+            modelBuilder.Entity<DupOnHash>().HasNoKey();
 
             OnModelCreatingPartial(modelBuilder);
         }

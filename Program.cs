@@ -81,7 +81,7 @@ namespace DupesMaint2
 			#region "subcommand6 CheckSumDups insert or update based on hash from CheckSum"
 			Command command6 = new ("FindDupsUsingHash", "CheckSumDups insert or update based on hash from CheckSum.")
 			{
-				new Option<string>("--hash", "Hash to use average, difference, perceptual.").FromAmong("average", "difference", "perceptual"),
+				new Option<string>("--hash", "Hash to use average, difference, perceptual.").FromAmong("SHA", "average", "difference", "perceptual"),
 				new Option<bool>("--verbose", getDefaultValue: () => false, "Verbose logging.")
 			};
 			command6.Handler = CommandHandler.Create((string hash, bool verbose) => { HelperLib.FindDupsUsingHash(hash, verbose); });
