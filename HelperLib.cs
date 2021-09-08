@@ -264,44 +264,43 @@ namespace DupesMaint2
 
 		public void Tester()
         {
-			//var connectioString = _config.GetValue<string>("PopsDB");
-			//Serilog.Log.Information($"\tconnectionString: {connectioString}\n\t\tConnectionString: {ConnectionString}");
+            //var connectioString = _config.GetValue<string>("PopsDB");
+            //Serilog.Log.Information($"\tconnectionString: {connectioString}\n\t\tConnectionString: {ConnectionString}");
 
-			using (PopsDbContext popsDbContext = new())
-			{
-				//CheckSumDupsBasedOn checkSumDupsBasedOn = new()
-				//{
+            using PopsDbContext popsDbContext = new();
+ 
+			//CheckSumDupsBasedOn checkSumDupsBasedOn = new()
+			//{
 
-				//	CheckSumId = -2,
-				//	DupBasedOn = "Test -1",
-				//	BasedOnVal = "Test -1",
-				//};
+			//	CheckSumId = -2,
+			//	DupBasedOn = "Test -1",
+			//	BasedOnVal = "Test -1",
+			//};
 
-				CheckSumDups checkSumDups = new()
-				{
-					CheckSumId = -3,
-					ToDelete = "N",
-				};
+			CheckSumDups checkSumDups = new()
+            {
+                CheckSumId = -3,
+                ToDelete = "N",
+            };
 
 
-				checkSumDups.CheckSumDupsBasedOnRows.Add(
-                    new CheckSumDupsBasedOn
-                    {
-                        CheckSumId = checkSumDups.CheckSumId,
-                        DupBasedOn = "Test -3",
-                        BasedOnVal = "Test -3",
-                    });
+            checkSumDups.CheckSumDupsBasedOnRows.Add(
+                new CheckSumDupsBasedOn
+                {
+                    CheckSumId = checkSumDups.CheckSumId,
+                    DupBasedOn = "Test -3",
+                    BasedOnVal = "Test -3",
+                });
 
-                popsDbContext.Add(checkSumDups);
-				popsDbContext.SaveChanges();
-			}
-		}
+            popsDbContext.Add(checkSumDups);
+            popsDbContext.SaveChanges();
+        }
 
 		// TODO: ONLY WORKS FOR PERCEPTUALHASH
 		public static void FindDupsUsingHash(string hash, bool verbose)
 		{
 			PopsDbContext popsDbContext = new ();
-			int insertCheckSumDupsCount = 0, updateCheckSumDupsBasedOnCount = 0, insertCheckSumDupsBasedOnCount = 0;
+			int processedCount = 0, insertCheckSumDupsCount = 0, updateCheckSumDupsBasedOnCount = 0, insertCheckSumDupsBasedOnCount = 0;
 
 			Serilog.Log.Information($"FindDupsUsingHash - Starting\n\thash: {hash}\n\tverbose: {verbose}\n");
 			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -348,6 +347,11 @@ namespace DupesMaint2
 
 					// Call CheckSumDup_upsert() to insert or update CheckSumDups and its child table CheckSumBasedOn
 					CheckSumDup_upsert(dupOnHash1, verbose, ref insertCheckSumDupsCount, ref updateCheckSumDupsBasedOnCount, ref insertCheckSumDupsBasedOnCount);
+				}
+
+				if (++processedCount % 1000 == 0)
+				{
+					Serilog.Log.Information($"FindDupsUsingHash - {processedCount,6:N0}. Completed:{((processedCount * 100) / checkSumWithDups.LongCount()),3:N0}%.");
 				}
 			}
 

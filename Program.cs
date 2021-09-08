@@ -68,9 +68,9 @@ namespace DupesMaint2
 			Command command5 = new ("CalculateHashes", "Calculate and store up to 3 perceptual hashes in the CheckSum table.")
 			{
 				new Option<bool>("--ShaHash", getDefaultValue: () => false, "Calculate the ShaHash.") { IsRequired = true },
-				new Option<bool>("--averageHash", getDefaultValue: () => false, "Calculate the AverageHash.") { IsRequired = true },
-				new Option<bool>("--differenceHash", getDefaultValue: () => false, "Calculate the DifferenceHash.") { IsRequired = true },
-				new Option<bool>("--perceptualHash", getDefaultValue: () => false, "Calculate the PerceptualHash.") { IsRequired = true },
+				new Option<bool>("--AverageHash", getDefaultValue: () => false, "Calculate the AverageHash.") { IsRequired = true },
+				new Option<bool>("--DifferenceHash", getDefaultValue: () => false, "Calculate the DifferenceHash.") { IsRequired = true },
+				new Option<bool>("--PerceptualHash", getDefaultValue: () => false, "Calculate the PerceptualHash.") { IsRequired = true },
 				new Option<bool>("--verbose", getDefaultValue: () => false, "Verbose logging.")
 			};
 			command5.Handler = CommandHandler.Create((bool ShaHash, bool averageHash, bool differenceHash, bool perceptualHash, bool verbose) => { HelperLib.CalculateHashes(ShaHash, averageHash, differenceHash, perceptualHash, verbose); });
@@ -82,7 +82,7 @@ namespace DupesMaint2
 			#region "subcommand6 CheckSumDups insert or update based on hash from CheckSum"
 			Command command6 = new ("FindDupsUsingHash", "CheckSumDups insert or update based on hash from CheckSum.")
 			{
-				new Option<string>("--hash", "Hash to use average, difference, perceptual.").FromAmong("SHA", "average", "difference", "perceptual"),
+				new Option<string>("--hash", "Hash to use average, difference, perceptual.").FromAmong("ShaHash", "AverageHash", "DifferenceHash", "PerceptualHash"),
 				new Option<bool>("--verbose", getDefaultValue: () => false, "Verbose logging.")
 			};
 			command6.Handler = CommandHandler.Create((string hash, bool verbose) => { HelperLib.FindDupsUsingHash(hash, verbose); });
