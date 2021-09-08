@@ -93,7 +93,6 @@ namespace DupesMaint2.Models
                     .IsUnicode(false);
 
                 entity.Property(e => e.Sha)
-                    .IsRequired()
                     .HasMaxLength(200)
                     .IsUnicode(false)
                     .HasColumnName("SHA");
@@ -112,17 +111,11 @@ namespace DupesMaint2.Models
 
                 entity.HasKey(e => e.Id);
 
-                entity.Property(e => e.DupBasedOn)
-                    .HasMaxLength(20);
+                entity.Property(e => e.Id)
+                    .IsRequired();
 
-                entity.Property(e => e.Sha)
-                    .HasMaxLength(200)
-                    .IsUnicode(false)
-                    .HasColumnName("SHA");
-
-                entity.Property(e => e.AverageHash).HasColumnType("decimal(20, 0)");
-                entity.Property(e => e.DifferenceHash).HasColumnType("decimal(20, 0)");
-                entity.Property(e => e.PerceptualHash).HasColumnType("decimal(20, 0)");
+                entity.Property(e => e.CheckSumId)
+                    .IsRequired();
 
                 entity.Property(e => e.ToDelete)
                     .IsRequired()

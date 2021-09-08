@@ -90,8 +90,6 @@ namespace DupesMaint2
 			new FileExtensionTypes { Type = ".PNG", Group = "Photo" },
 		};
 
-		// List of Checksum rows where filenames are the same
-		private static List<CheckSum> _checkSums = new();
 
 		/// <summary>
 		/// Root Command - Process
@@ -106,8 +104,8 @@ namespace DupesMaint2
 
 			if (replace)
 			{
-				using IDbConnection db = new SqlConnection(ConnectionString);
-				db.Execute("truncate table dbo.CheckSum");
+				//using IDbConnection db = new SqlConnection(ConnectionString);
+				//db.Execute("truncate table dbo.CheckSum");
 			}
 
 			// main processing
@@ -121,21 +119,22 @@ namespace DupesMaint2
 		/// <summary>
 		/// Command5 - calculate and store the requested hashes in the CheckSum table
 		/// </summary>
+		/// <param name="ShaHash">bool -</param>
 		/// <param name="averageHash">bool -</param>
 		/// <param name="differenceHash">bool -</param>
 		/// <param name="perceptualHash">bool - </param>
 		/// <param name="verbose">bool - verbose logging</param>
-		public static void CalculateHashes(bool averageHash, bool differenceHash, bool perceptualHash, bool verbose)
+		public static void CalculateHashes(bool ShaHash, bool averageHash, bool differenceHash, bool perceptualHash, bool verbose)
 		{
 			PopsDbContext popsDbContext = new PopsDbContext();
-			Serilog.Log.Information($"CalculateHashes - Starting\n\taverageHash: {averageHash}\n\tdifferenceHash: {differenceHash}\n\tperceptualHash: {perceptualHash}\n\tverbose: {verbose}\n");
+			Serilog.Log.Information($"CalculateHashes - Starting\n\tShaHash: {ShaHash}\n\taverageHash: {averageHash}\n\tdifferenceHash: {differenceHash}\n\tperceptualHash: {perceptualHash}\n\tverbose: {verbose}\n");
 			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 			int processedCount = 0, dropCount = 0;
 			string logMessage;
 
 			// get a list of all CheckSum rows 
-			var checkSums = popsDbContext.CheckSums.Where(e => e.Id <= 48100).AsList();
-			Serilog.Log.Information($"CalculateHashes - Found checkSums.Count: {checkSums.Count:N0}");
+			var checkSums = popsDbContext.CheckSums;
+			Serilog.Log.Information($"CalculateHashes - Found checkSums.Count: {checkSums.LongCount():N0}");
 
 			foreach (var checkSum in checkSums)
 			{
@@ -153,11 +152,19 @@ namespace DupesMaint2
 					continue;
 				}
 
-				// type can have hashes calculated
+
+				// type can have numeric hashes calculated
 				FileInfo fileInfo = new(checkSum.FileFullName);
+
 
 				try    // Calculate the requested hashes
 				{
+                    // calculate the Sha hash
+                    if (ShaHash)
+                    {
+						checkSum.Sha = calcShaHash(fileInfo);
+                    }
+
 					// image processor seems to have a limit on file size
 					if (fileInfo.Length > 71000000)
 					{
@@ -196,7 +203,6 @@ namespace DupesMaint2
 				catch (Exception ex)
 				{
 					Serilog.Log.Error($"CalculateHashes - id: {checkSum.Id}\nex: {ex}\n{new String('-', 150)}\n");
-					throw;
 				}
 
 				if (verbose)
@@ -206,10 +212,11 @@ namespace DupesMaint2
 
 				if ((++processedCount + dropCount) % 1000 == 0)
 				{
-					Serilog.Log.Information($"CalculateHashes - {processedCount + dropCount,6:N0}. Completed:{(((processedCount + dropCount) * 100) / checkSums.Count),3:N0}%.");
+					Serilog.Log.Information($"CalculateHashes - {processedCount + dropCount,6:N0}. Completed:{(((processedCount + dropCount) * 100) / checkSums.LongCount()),3:N0}%.");
 				}
+
 			}
-			Serilog.Log.Information($"CalculateHashes - Finished processing checkSums.Count: {checkSums.Count:N0}, processedCount: {processedCount:N0}, dropCount: {dropCount:N0}.");
+			Serilog.Log.Information($"CalculateHashes - Finished processing checkSums.Count: {checkSums.LongCount():N0}, processedCount: {processedCount:N0}, dropCount: {dropCount:N0}.");
 
 			// update the database
 			popsDbContext.SaveChanges();
@@ -220,6 +227,20 @@ namespace DupesMaint2
 			////////////////
 			// local methods
 			////////////////
+			string calcShaHash(FileInfo fileInfo)
+			{
+				// calculate the SHA256 checksum for the file and return it with the elapsed processing time using a tuple
+
+					FileStream fs = fileInfo.OpenRead();
+					//fs.Position = 0;
+
+					// ComputeHash - returns byte array  
+					byte[] bytes = SHA256.Create().ComputeHash(fs);
+
+					// BitConverter used to put all bytes into one string, hyphen delimited  
+					return BitConverter.ToString(bytes);
+			}
+
 			decimal calcAverageHash(FileInfo fileInfo)
 			{
 				AverageHash averageHash = new();    // instaniate the class
@@ -248,139 +269,186 @@ namespace DupesMaint2
 
 			using (PopsDbContext popsDbContext = new())
 			{
-				CheckSumDupsBasedOn checkSumDupsBasedOn = new()
-				{
+				//CheckSumDupsBasedOn checkSumDupsBasedOn = new()
+				//{
 
-					CheckSumId = -2,
-					DupBasedOn = "Test -1",
-					BasedOnVal = "Test -1",
-				};
+				//	CheckSumId = -2,
+				//	DupBasedOn = "Test -1",
+				//	BasedOnVal = "Test -1",
+				//};
 
 				CheckSumDups checkSumDups = new()
 				{
-					CheckSumId = -2,
-					DupBasedOn = "test",
+					CheckSumId = -3,
 					ToDelete = "N",
 				};
 
 
-				checkSumDups.CheckSumDupsBasedOnRows.Add(checkSumDupsBasedOn);
-					//new CheckSumDupsBasedOn
-					//{
-					//	CheckSumId = checkSumDups.Id,
-					//	DupBasedOn = "Test -1",
-					//	BasedOnVal = "Test -1",
-					//	CheckSumDupsCheckSumId = -1
-					//});
+				checkSumDups.CheckSumDupsBasedOnRows.Add(
+                    new CheckSumDupsBasedOn
+                    {
+                        CheckSumId = checkSumDups.CheckSumId,
+                        DupBasedOn = "Test -3",
+                        BasedOnVal = "Test -3",
+                    });
 
-				popsDbContext.Add(checkSumDups);
+                popsDbContext.Add(checkSumDups);
 				popsDbContext.SaveChanges();
 			}
 		}
 
+		// TODO: ONLY WORKS FOR PERCEPTUALHASH
 		public static void FindDupsUsingHash(string hash, bool verbose)
 		{
 			PopsDbContext popsDbContext = new ();
-			//string hashToUse = string.Empty;
-			string sqlRaw = $"select Id as CheckSumId, '{hash}' as DupBasedOn, cast({hash} as varchar(200)) as BasedOnVal, null as CheckSumDupsId from CheckSum as CheckSumDupsBasedOn where {hash} in (select {hash} from CheckSum group by {hash} having count(*) > 1)";
-			int processedCount = 0, insertCheckSumDupsCount = 0, updateCheckSumDupsBasedOnCount = 0;
+			int insertCheckSumDupsCount = 0, updateCheckSumDupsBasedOnCount = 0, insertCheckSumDupsBasedOnCount = 0;
 
-			Serilog.Log.Information($"FindDupsUsingHash - Starting\n\thash: {hash}\n\tverbose: {verbose}\n\tsqlRaw: {sqlRaw}\n");
+			Serilog.Log.Information($"FindDupsUsingHash - Starting\n\thash: {hash}\n\tverbose: {verbose}\n");
 			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-			//var checkSumDups = popsDbContext.CheckSumDups;
-			//Serilog.Log.Information($"FindDupsUsingHash - Loaded table checkSumDups.Count: {checkSumDups.LongCount():N0}");
+			// project a list of CheckSum rows where the count > 1 based on the column PerceptualHash
+			var checkSumWithDups = from c in popsDbContext.CheckSums
+								   where c.PerceptualHash != null
+								   group c by c.PerceptualHash
+								   into g
+								   where g.Count() > 1
+								   //orderby g.Count() descending
+								   select new { hashVal = g.Key, Count = g.Count() };
 
-			var dupOnHash = popsDbContext.DupOnHash.FromSqlRaw(sqlRaw);
-			if (dupOnHash.LongCount() == 0)
-			{
-				Serilog.Log.Warning($"FindDupsUsingHash - No duplicates found based on hash: {hash}\n.{new String('-', 150)}");
-				return;
-			}
-			Serilog.Log.Information($"FindDupsUsingHash - Loaded view model dupOnhashes.Count: {dupOnHash.LongCount():N0}");
+			Serilog.Log.Information($"FindDupsUsingHash - Loaded table checkSumWithDups.Count: {checkSumWithDups.LongCount():N0}");
 
-			// Process the list of duplicates found in CheckSum table
-			foreach (var row in dupOnHash)
-			{
-				CheckSumDup_upsert(row, hash, verbose, ref insertCheckSumDupsCount, ref updateCheckSumDupsBasedOnCount);
+            foreach (var checkSumWithDup in checkSumWithDups)
+            {
+                if (verbose)
+                {
+					Serilog.Log.Information($"FindDupsUsingHash - checkSumWithDup.hashVal: {checkSumWithDup.hashVal}, {checkSumWithDup.Count}");
+				}
 
-				if (++processedCount % 1000 == 0)
-				{
-					Serilog.Log.Information($"FindDupsUsingHash - {processedCount,6:N0}. Completed:{((processedCount * 100) / dupOnHash.LongCount()),3:N0}%.");
+				// get the CheckSum rows with this hash value
+				var checkSums4Dup = from c in popsDbContext.CheckSums
+								   where c.PerceptualHash == checkSumWithDup.hashVal
+								   select c;
+
+				// check that the count is correct
+                if (checkSums4Dup.LongCount() != checkSumWithDup.Count)
+                {
+					Serilog.Log.Warning($"FindDupsUsingHash - checkSum4Dup.LongCount(): {checkSums4Dup.LongCount()} not equal to checkSumWithDup.Count: {checkSumWithDup.Count}.\n\tAnother process may be updating CheckSum.");
+					continue;
+				}
+
+                foreach (var checkSum4Dup in checkSums4Dup)
+                {
+					// move the projected values into a row from the class DupOnHash in order to pass to the method
+					DupOnHash dupOnHash1 = new ()
+					{
+						CheckSumId = checkSum4Dup.Id,
+						DupBasedOn = hash,
+						BasedOnVal = checkSumWithDup.hashVal.ToString()
+					};
+
+					// Call CheckSumDup_upsert() to insert or update CheckSumDups and its child table CheckSumBasedOn
+					CheckSumDup_upsert(dupOnHash1, verbose, ref insertCheckSumDupsCount, ref updateCheckSumDupsBasedOnCount, ref insertCheckSumDupsBasedOnCount);
 				}
 			}
 
-			// update the database table CheckSumDups. NB. This only works for entities loaded as DBset type
-			//popsDbContext.SaveChanges();
-
 			_stopwatch.Stop();
-			Serilog.Log.Information($"FindDupsUsingHash - insertCheckSumDupsCount: {insertCheckSumDupsCount:N0}, updateCheckSumDupsBasedOnCount: {updateCheckSumDupsBasedOnCount:N0}, execution time: {_stopwatch.Elapsed.TotalSeconds:N0} secs.\n{new String('-', 150)}");
-
+			Serilog.Log.Information($"FindDupsUsingHash - insertCheckSumDupsCount: {insertCheckSumDupsCount:N0}, updateCheckSumDupsBasedOnCount: {updateCheckSumDupsBasedOnCount:N0}, execution time: {_stopwatch.Elapsed.TotalMinutes:N1} mins.\n{new String('=', 150)}");
 		}
 
-        private static void CheckSumDup_upsert(DupOnHash dupOnHash, string hash, bool verbose, ref int insertCheckSumDupsCount, ref int updateCheckSumDupsBasedOnCount)
+        private static void CheckSumDup_upsert(DupOnHash dupOnHash, bool verbose, ref int insertCheckSumDupsCount, ref int updateCheckSumDupsBasedOnCount, ref int insertCheckSumDupsBasedOnCount)
         {
 			PopsDbContext popsDbContext = new ();
 
-			var checkSumDup = popsDbContext.CheckSumDups.Where(e => e.CheckSumId == dupOnHash.CheckSumId).ToList().FirstOrDefault();
-            if (checkSumDup is null)    // need to insert a new CheckSumDups row
-            {
+			// check if a CheckSumDups row exists for this CheckSumId and hash values
+			var checkSumDupPlusBasedOn = popsDbContext.CheckSumDups
+											.Where(e => e.CheckSumId == dupOnHash.CheckSumId)
+											.Select(e => new
+											{
+												e.Id,
+												CheckSumDupsBasedOn = e.CheckSumDupsBasedOnRows.Select(b => new
+												{
+													b.CheckSumId,
+													b.DupBasedOn,
+													b.BasedOnVal
+												})
+											})
+											.FirstOrDefault();
+
+
+			if (checkSumDupPlusBasedOn is null)    // need to insert a new CheckSumDups row and its child row CheckSumDupsBasedOn
+			{
                 CheckSumDups checkSumDup1 = new()
                 {
                     CheckSumId = dupOnHash.CheckSumId
                 };
-                popsDbContext.CheckSumDups.Add(checkSumDup1);
-                insertCheckSumDupsCount++;
 
-                checkSumDup1.CheckSumDupsBasedOnRows.Add(
+				// add the child row - CheckSumDupsBasedOn
+				checkSumDup1.CheckSumDupsBasedOnRows.Add(
                     new CheckSumDupsBasedOn
                     {
                         CheckSumId = checkSumDup1.CheckSumId,
-                        DupBasedOn = hash,
+                        DupBasedOn = dupOnHash.DupBasedOn,
                         BasedOnVal = dupOnHash.BasedOnVal
                     });
 
-                if (verbose)
+				// save the parent ChecSumDup and child CheckSumDupsBasedOn
+				popsDbContext.Add(checkSumDup1);
+
+				insertCheckSumDupsCount++;
+
+				if (verbose)
                 {
-                    Serilog.Log.Information($"FindDupsUsingHash - Added new CheckSumDup and CheckSumDupsBasedOn rows, checkSum.Id: {checkSumDup1.CheckSumId}, hash: {hash}.");
+                    Serilog.Log.Information($"FindDupsUsingHash - Added new CheckSumDup and CheckSumDupsBasedOn rows, checkSum.Id: {checkSumDup1.CheckSumId}, hash: {dupOnHash.DupBasedOn}.");
                 }
             }
             else     // just add the new CheckSumDupsBasedOn row for this CheckSumDup. Delete any existing value first.
             {
-                // check for existing CheckSumDupsBasedOn row for this CheckSumDup with DupBasedOn = hash
-                if (checkSumDup.CheckSumDupsBasedOnRows.Count > 0)
+				// Get the existing CheckSumDups row
+				CheckSumDups checkSumDups = popsDbContext.CheckSumDups.Where(e => e.Id == checkSumDupPlusBasedOn.Id).FirstOrDefault();
+
+				// Get the CheckSumDupsBasedOn row for this CheckSumDup and hash
+				CheckSumDupsBasedOn checkSumDupsBasedOn1 = popsDbContext.CheckSumDupsBasedOn.Where(c => c.CheckSumId == checkSumDups.CheckSumId && c.DupBasedOn == dupOnHash.DupBasedOn).FirstOrDefault();
+                if (checkSumDupsBasedOn1 is not null)
                 {
-                    var checkSumDupsBasedOn4CheckSumDup = checkSumDup.CheckSumDupsBasedOnRows.Where(e => e.BasedOnVal == hash).FirstOrDefault();
-                    if (checkSumDupsBasedOn4CheckSumDup is not null)
-                    {
-                        popsDbContext.CheckSumDupsBasedOn.Remove(checkSumDupsBasedOn4CheckSumDup);
-                    }
-                }
+					checkSumDupsBasedOn1.BasedOnVal = dupOnHash.BasedOnVal;
 
-                checkSumDup.CheckSumDupsBasedOnRows.Add(
-                    new CheckSumDupsBasedOn
-                    {
-                        CheckSumId = dupOnHash.CheckSumId,
-                        DupBasedOn = hash,
-                        BasedOnVal = dupOnHash.BasedOnVal
-                    });
-
-                updateCheckSumDupsBasedOnCount++;
-                if (verbose)
+					if (verbose)
+					{
+						Serilog.Log.Information($"FindDupsUsingHash - Existing CheckSumDup, checkSum.Id: {checkSumDups.CheckSumId}, Updated CheckSumDupsBasedOn row with checkSum.Id: {checkSumDupsBasedOn1.CheckSumId}, " +
+							$"hash: {dupOnHash.DupBasedOn}, checkSumDupsBasedOn1.BasedOnVal: {checkSumDupsBasedOn1.BasedOnVal}.");
+					}
+				}
+				else
                 {
-                    Serilog.Log.Information($"FindDupsUsingHash - Existing CheckSumDup, checkSum.Id: {checkSumDup.CheckSumId}, added CheckSumDupsBasedOn row with checkSum.Id: {checkSumDup.CheckSumId}, hash: {hash}.");
-                }
-            }
+					checkSumDups.CheckSumDupsBasedOnRows.Add(
+						new CheckSumDupsBasedOn
+						{
+							CheckSumId = dupOnHash.CheckSumId,
+							DupBasedOn = dupOnHash.DupBasedOn,
+							BasedOnVal = dupOnHash.BasedOnVal
+						});
 
-            popsDbContext.SaveChanges();
-        }
+					popsDbContext.Update(checkSumDups);
+					updateCheckSumDupsBasedOnCount++;
 
-        /// <summary>
-        /// Command2 - Process all the files in the folder tree passed in and add rows to CheckSum table
-        /// </summary>
-        /// <param name="folder">DirectoryInfo - root folder to the folder structure.</param>
-        /// <param name="replace">Bool - If True truncate the CheckSum table else add rows.</param>
-        public static void ProcessEXIF(DirectoryInfo folder, bool replace)
+					if (verbose)
+					{
+						Serilog.Log.Information($"FindDupsUsingHash - Existing CheckSumDup, checkSum.Id: {checkSumDups.CheckSumId}, added CheckSumDupsBasedOn row with checkSum.Id: {checkSumDups.CheckSumId}, " +
+							$"hash: {dupOnHash.DupBasedOn}, dupOnHash.BasedOnVal: {dupOnHash.BasedOnVal}.");
+					}
+				}
+
+			}
+ 
+			popsDbContext.SaveChanges();
+		}
+
+		/// <summary>
+		/// Command2 - Process all the files in the folder tree passed in and add rows to CheckSum table
+		/// </summary>
+		/// <param name="folder">DirectoryInfo - root folder to the folder structure.</param>
+		/// <param name="replace">Bool - If True truncate the CheckSum table else add rows.</param>
+		public static void ProcessEXIF(DirectoryInfo folder, bool replace)
 		{
 			int _count = 0;
 			Serilog.Log.Information($"ProcessEXIF: target folder is {folder.FullName}\tTruncate CheckSum is: {replace}.");
@@ -455,6 +523,8 @@ namespace DupesMaint2
 		private static int ProcessFiles(DirectoryInfo folder)
 		{
 			System.Diagnostics.Stopwatch process100Watch = System.Diagnostics.Stopwatch.StartNew();
+			PopsDbContext popsDbContext = new();
+			List<CheckSum> checkSums = new();
 
 			int _count = 0;
 			FileInfo[] _files = folder.GetFiles("*.JPG", SearchOption.AllDirectories);
@@ -464,33 +534,21 @@ namespace DupesMaint2
 			foreach (FileInfo fileInfo in _files)
 			{
 				// calculate the SHA string for the file and return it with the time taken in ms in a tuple
-				(string SHA, int timerMs) = CalcSHA(fileInfo);
+				//(string SHA, int timerMs) = CalcSHA(fileInfo);
 
 				// instantiate a new CheckSum object for the file
 				CheckSum checkSum = new CheckSum
 				{
-					Sha = SHA,
+					//Sha = SHA,
 					Folder = fileInfo.DirectoryName,
 					TheFileName = fileInfo.Name,
 					FileExt = fileInfo.Extension.ToUpper(),
 					FileSize = (int)fileInfo.Length,
 					FileCreateDt = fileInfo.CreationTime,
-					TimerMs = timerMs
+					TimerMs = 0,
 				};
 
-				// see if the file name already exists in the CheckSums list
-				CheckSum alreadyExists = _checkSums.Find(x => x.Sha == SHA);
-
-				// if the file name already exists then write the Checksum and the new Checksum to the CheckSum tables in the DB
-				if (alreadyExists != null)
-				{
-					CheckSum_upd(alreadyExists);
-					CheckSum_upd(checkSum);
-				}
-				else // just add the new file to the CheckSum list in memory
-				{
-					_checkSums.Add(checkSum);
-				}
+				popsDbContext.Add(checkSum);
 
 				if (++_count % 1000 == 0)
 				{
@@ -500,6 +558,8 @@ namespace DupesMaint2
 					process100Watch.Start();
 				}
 			}
+
+			popsDbContext.SaveChanges();
 			return _count;
 		}
 
@@ -507,69 +567,71 @@ namespace DupesMaint2
 		// Process the duplicate rows in the CheckSum table and report files to delete or report AND delete.
 		public static void DeleteDupes(bool delete)
 		{
-			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
+			throw new NotImplementedException();
 
-			// 1. Make sure there are some duplicate rows in the CheckSum table
-			const string sql = @"select SHA,Count(*) as DupeCount from CheckSum group by SHA having Count(*)>1";
+			//System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-			Serilog.Log.Information($"DeleteDupes - Starting DeleteDupes: --delete: {delete} sql: {sql}");
+			//// 1. Make sure there are some duplicate rows in the CheckSum table
+			//const string sql = @"select SHA,Count(*) as DupeCount from CheckSum group by SHA having Count(*)>1";
 
-			using var cnn = new SqlConnection(ConnectionString);
-			var _CheckSumHasDuplicates = cnn.Query<CheckSumHasDuplicates>(sql).AsList();
+			//Serilog.Log.Information($"DeleteDupes - Starting DeleteDupes: --delete: {delete} sql: {sql}");
 
-			if (_CheckSumHasDuplicates.Count == 0)
-			{
-				Serilog.Log.Error("DeleteDupes - Abort. No duplicates found in CheckSum{new String('-', 150)}\n");
-				return;
-			}
-			Serilog.Log.Information($"DeleteDupes - {_CheckSumHasDuplicates.Count} duplicates found in the CheckSum table.");
+			//using var cnn = new SqlConnection(ConnectionString);
+			//var _CheckSumHasDuplicates = cnn.Query<CheckSumHasDuplicates>(sql).AsList();
 
-			// Main processing foreach loop local function
-			ProcessDeleteDupes();
+			//if (_CheckSumHasDuplicates.Count == 0)
+			//{
+			//	Serilog.Log.Error("DeleteDupes - Abort. No duplicates found in CheckSum{new String('-', 150)}\n");
+			//	return;
+			//}
+			//Serilog.Log.Information($"DeleteDupes - {_CheckSumHasDuplicates.Count} duplicates found in the CheckSum table.");
 
-			_stopwatch.Stop();
-			Serilog.Log.Information($"INFO\t- Total execution time: {_stopwatch.Elapsed.Minutes} mins.{new String('-', 150)}\n");
+			//// Main processing foreach loop local function
+			//ProcessDeleteDupes();
 
-			/////////////////
-			// local function
-			/////////////////
-			void ProcessDeleteDupes()
-			{
-				foreach (var aCheckSumHasDuplicates in _CheckSumHasDuplicates)
-				{
-					using var cnn = new SqlConnection(ConnectionString);
-					var _CheckSum = cnn.Query<CheckSum>($"select * from CheckSum where SHA='{aCheckSumHasDuplicates.SHA}' order by LEN(TheFileName) desc").AsList();
-					if (_CheckSum.Count < 2)
-					{
-						Serilog.Log.Error($"ProcessDeleteDupes - Only found {_CheckSum.Count} CheckSum rows with SHA: {aCheckSumHasDuplicates.SHA}, should be >= 2.");
-						continue;
-					}
+			//_stopwatch.Stop();
+			//Serilog.Log.Information($"INFO\t- Total execution time: {_stopwatch.Elapsed.Minutes} mins.{new String('-', 150)}\n");
 
-					Serilog.Log.Information($"ProcessDeleteDupes - {_CheckSum.Count} CheckSum rows for duplicate SHA: {aCheckSumHasDuplicates.SHA}");
+			///////////////////
+			//// local function
+			///////////////////
+			//void ProcessDeleteDupes()
+			//{
+			//	foreach (var aCheckSumHasDuplicates in _CheckSumHasDuplicates)
+			//	{
+			//		using var cnn = new SqlConnection(ConnectionString);
+			//		var _CheckSum = cnn.Query<CheckSum>($"select * from CheckSum where SHA='{aCheckSumHasDuplicates.SHA}' order by LEN(TheFileName) desc").AsList();
+			//		if (_CheckSum.Count < 2)
+			//		{
+			//			Serilog.Log.Error($"ProcessDeleteDupes - Only found {_CheckSum.Count} CheckSum rows with SHA: {aCheckSumHasDuplicates.SHA}, should be >= 2.");
+			//			continue;
+			//		}
 
-					// get the CheckSum row with the longest name NB could be the same
-					var aCheckSum = _CheckSum[0];
-					if (delete)
-					{
-						FileInfo deleteFileInfo = new FileInfo(Path.Combine(aCheckSum.Folder, aCheckSum.TheFileName));
-						if (deleteFileInfo.Exists)
-						{
-							deleteFileInfo.Delete();
-							using IDbConnection db = new SqlConnection(ConnectionString);
-							db.Execute($"delete from dbo.CheckSum where Id={aCheckSum.Id}");
-							Serilog.Log.Warning($"ProcessDeleteDupes - Deleted the SHA with the longest duplicate name was id: {aCheckSum.Id}\tThe name was: {aCheckSum.TheFileName}\tThe folder was: {aCheckSum.Folder}");
-						}
-						else
-						{
-							Serilog.Log.Error($"ProcessDeleteDupes - The duplicate to delete {aCheckSum.TheFileName}\tdoes not now exits in folder: {aCheckSum.Folder}");
-						}
-					}
-					else
-					{
-						Serilog.Log.Information($"ProcessDeleteDupes - No delete. The SHA with the longest duplicate name is id: {aCheckSum.Id}\tThe name is: {aCheckSum.TheFileName}\tThe folder is: {aCheckSum.Folder}");
-					}
-				}
-			}
+			//		Serilog.Log.Information($"ProcessDeleteDupes - {_CheckSum.Count} CheckSum rows for duplicate SHA: {aCheckSumHasDuplicates.SHA}");
+
+			//		// get the CheckSum row with the longest name NB could be the same
+			//		var aCheckSum = _CheckSum[0];
+			//		if (delete)
+			//		{
+			//			FileInfo deleteFileInfo = new FileInfo(Path.Combine(aCheckSum.Folder, aCheckSum.TheFileName));
+			//			if (deleteFileInfo.Exists)
+			//			{
+			//				deleteFileInfo.Delete();
+			//				using IDbConnection db = new SqlConnection(ConnectionString);
+			//				db.Execute($"delete from dbo.CheckSum where Id={aCheckSum.Id}");
+			//				Serilog.Log.Warning($"ProcessDeleteDupes - Deleted the SHA with the longest duplicate name was id: {aCheckSum.Id}\tThe name was: {aCheckSum.TheFileName}\tThe folder was: {aCheckSum.Folder}");
+			//			}
+			//			else
+			//			{
+			//				Serilog.Log.Error($"ProcessDeleteDupes - The duplicate to delete {aCheckSum.TheFileName}\tdoes not now exits in folder: {aCheckSum.Folder}");
+			//			}
+			//		}
+			//		else
+			//		{
+			//			Serilog.Log.Information($"ProcessDeleteDupes - No delete. The SHA with the longest duplicate name is id: {aCheckSum.Id}\tThe name is: {aCheckSum.TheFileName}\tThe folder is: {aCheckSum.Folder}");
+			//		}
+			//	}
+			//}
 		}
 
 
@@ -702,8 +764,10 @@ namespace DupesMaint2
 		private static Stream GetStream(FileInfo fileInfo)
 		{
 			if (fileInfo.Exists)
-			{
-				return fileInfo.OpenRead();
+			{			
+				FileStream fi = fileInfo.OpenRead();
+				fi.Position = 0;
+				return fi;
 			}
 
 			throw new FileNotFoundException(fileInfo.FullName);

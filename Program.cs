@@ -67,12 +67,13 @@ namespace DupesMaint2
 			#region "subcommand5 CalculateHashes"
 			Command command5 = new ("CalculateHashes", "Calculate and store up to 3 perceptual hashes in the CheckSum table.")
 			{
+				new Option<bool>("--ShaHash", getDefaultValue: () => false, "Calculate the ShaHash.") { IsRequired = true },
 				new Option<bool>("--averageHash", getDefaultValue: () => false, "Calculate the AverageHash.") { IsRequired = true },
 				new Option<bool>("--differenceHash", getDefaultValue: () => false, "Calculate the DifferenceHash.") { IsRequired = true },
 				new Option<bool>("--perceptualHash", getDefaultValue: () => false, "Calculate the PerceptualHash.") { IsRequired = true },
 				new Option<bool>("--verbose", getDefaultValue: () => false, "Verbose logging.")
 			};
-			command5.Handler = CommandHandler.Create((bool averageHash, bool differenceHash, bool perceptualHash, bool verbose) => { HelperLib.CalculateHashes(averageHash, differenceHash, perceptualHash, verbose); });
+			command5.Handler = CommandHandler.Create((bool ShaHash, bool averageHash, bool differenceHash, bool perceptualHash, bool verbose) => { HelperLib.CalculateHashes(ShaHash, averageHash, differenceHash, perceptualHash, verbose); });
 			rootCommand.AddCommand(command5);
 			#endregion
 
