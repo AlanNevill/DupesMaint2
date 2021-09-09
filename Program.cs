@@ -64,8 +64,8 @@ namespace DupesMaint2
 
 
 			// Command5 - calculate and store up to 3 percuptual hashes in the CheckSum table
-			#region "subcommand5 CalculateHashes"
-			Command command5 = new ("CalculateHashes", "Calculate and store up to 3 perceptual hashes in the CheckSum table.")
+			#region "subcommand5 CalculateHashes - Calculate hashes and store in CheckSum"
+			Command command5 = new ("CalculateHashes", "Calculate and store hashes in the CheckSum table.")
 			{
 				new Option<bool>("--ShaHash", getDefaultValue: () => false, "Calculate the ShaHash.") { IsRequired = true },
 				new Option<bool>("--AverageHash", getDefaultValue: () => false, "Calculate the AverageHash.") { IsRequired = true },
@@ -79,8 +79,8 @@ namespace DupesMaint2
 
 
 			// Command6 - CheckSumDups insert or update based on hash from CheckSum
-			#region "subcommand6 CheckSumDups insert or update based on hash from CheckSum"
-			Command command6 = new ("FindDupsUsingHash", "CheckSumDups insert or update based on hash from CheckSum.")
+			#region "subcommand6 CheckSumDups - insert or update CheckSumDups based on hash from CheckSum"
+			Command command6 = new ("FindDupsUsingHash", "CheckSumDups - insert or update CheckSumDups based on hash from CheckSum.")
 			{
 				new Option<string>("--hash", "Hash to use average, difference, perceptual.").FromAmong("ShaHash", "AverageHash", "DifferenceHash", "PerceptualHash"),
 				new Option<bool>("--verbose", getDefaultValue: () => false, "Verbose logging.")

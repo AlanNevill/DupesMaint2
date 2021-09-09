@@ -296,44 +296,70 @@ namespace DupesMaint2
             popsDbContext.SaveChanges();
         }
 
-		// TODO: ONLY WORKS FOR PERCEPTUALHASH
+		// TODO: ONLY WORKS FOR ShaHash & PerceptualHash
 		public static void FindDupsUsingHash(string hash, bool verbose)
 		{
-			PopsDbContext popsDbContext = new ();
-			int processedCount = 0, insertCheckSumDupsCount = 0, updateCheckSumDupsBasedOnCount = 0, insertCheckSumDupsBasedOnCount = 0;
-
 			Serilog.Log.Information($"FindDupsUsingHash - Starting\n\thash: {hash}\n\tverbose: {verbose}\n");
 			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-			// project a list of CheckSum rows where the count > 1 based on the column PerceptualHash
-			var checkSumWithDups = from c in popsDbContext.CheckSums
-								   where c.PerceptualHash != null
-								   group c by c.PerceptualHash
-								   into g
-								   where g.Count() > 1
-								   //orderby g.Count() descending
-								   select new { hashVal = g.Key, Count = g.Count() };
+			PopsDbContext popsDbContext = new ();
+			int processedCount = 0, insertCheckSumDupsCount = 0, updateCheckSumDupsBasedOnCount = 0, insertCheckSumDupsBasedOnCount = 0;
+			object anonymousHash;
 
-			Serilog.Log.Information($"FindDupsUsingHash - Loaded table checkSumWithDups.Count: {checkSumWithDups.LongCount():N0}");
+            // get a collection of HashValues and count of each from CheckSum table where the count based on the hash column > 1 i.e. duplicates based on that hash type
+            switch (hash)
+            {
+				case "ShaHash":
+					anonymousHash = ShaHash();
+					break;
+				case "PerceptualHash":
+					anonymousHash = PerCeptualHash();
+					break;
+                default:
+					Serilog.Log.Error($"FindDupsUsingHash - Hash: {hash} not implemented, exiting.");
+					return;
+            }
 
-            foreach (var checkSumWithDup in checkSumWithDups)
+			// calculate the number of rows returned in the anonymous type
+			int anonymousCount = 0;
+            foreach (var checkSumWithDup in (dynamic)anonymousHash)
+			{
+				anonymousCount += checkSumWithDup.Count;
+			}
+			Serilog.Log.Information($"FindDupsUsingHash - anonymousCount: {anonymousCount:N0}");
+
+
+			foreach (var checkSumWithDup in (dynamic)anonymousHash)
             {
                 if (verbose)
                 {
 					Serilog.Log.Information($"FindDupsUsingHash - checkSumWithDup.hashVal: {checkSumWithDup.hashVal}, {checkSumWithDup.Count}");
 				}
 
-				// get the CheckSum rows with this hash value
-				var checkSums4Dup = from c in popsDbContext.CheckSums
-								   where c.PerceptualHash == checkSumWithDup.hashVal
-								   select c;
+				// get a collection of CheckSum.Ids from the rows with this hash value
+				dynamic checkSums4Dup;
+				switch (hash)
+				{
+					case "ShaHash":
+						string shaHashVal = checkSumWithDup.hashVal;
+						checkSums4Dup = from c in popsDbContext.CheckSums where c.Sha == shaHashVal select new { c.Id };
+						break;
+					case "PerceptualHash":
+						decimal? hashVal = checkSumWithDup.hashVal;
+						checkSums4Dup = from c in popsDbContext.CheckSums where c.PerceptualHash == hashVal select new { c.Id };
+						break;
+					default:
+						Serilog.Log.Error($"FindDupsUsingHash - Hash: {hash} not implemented, exiting.");
+						return;
+				}
+
 
 				// check that the count is correct
-                if (checkSums4Dup.LongCount() != checkSumWithDup.Count)
-                {
-					Serilog.Log.Warning($"FindDupsUsingHash - checkSum4Dup.LongCount(): {checkSums4Dup.LongCount()} not equal to checkSumWithDup.Count: {checkSumWithDup.Count}.\n\tAnother process may be updating CheckSum.");
-					continue;
-				}
+    //            if (checkSums4Dup.LongCount() != checkSumWithDup.Count)
+    //            {
+				//	Serilog.Log.Warning($"FindDupsUsingHash - checkSum4Dup.LongCount(): {checkSums4Dup.LongCount()} not equal to checkSumWithDup.Count: {checkSumWithDup.Count}.\n\tAnother process may be updating CheckSum.");
+				//	continue;
+				//}
 
                 foreach (var checkSum4Dup in checkSums4Dup)
                 {
@@ -351,12 +377,37 @@ namespace DupesMaint2
 
 				if (++processedCount % 1000 == 0)
 				{
-					Serilog.Log.Information($"FindDupsUsingHash - {processedCount,6:N0}. Completed:{((processedCount * 100) / checkSumWithDups.LongCount()),3:N0}%.");
+					Serilog.Log.Information($"FindDupsUsingHash - {processedCount,6:N0}. Completed:{((processedCount * 100) / anonymousCount),3:N0}%.");
 				}
 			}
 
 			_stopwatch.Stop();
 			Serilog.Log.Information($"FindDupsUsingHash - insertCheckSumDupsCount: {insertCheckSumDupsCount:N0}, updateCheckSumDupsBasedOnCount: {updateCheckSumDupsBasedOnCount:N0}, execution time: {_stopwatch.Elapsed.TotalMinutes:N1} mins.\n{new String('=', 150)}");
+
+			//////////////////////////////
+			/// Local methods
+			//////////////////////////////
+			object ShaHash()
+			{
+				return	from c in popsDbContext.CheckSums
+						where c.Sha != null
+						group c by c.Sha
+						into g
+						where g.Count() > 1
+						//orderby g.Count() descending
+						select new { hashVal = g.Key, Count = g.Count() };
+			}
+
+			object PerCeptualHash()
+            {
+				return	from c in popsDbContext.CheckSums
+						where c.PerceptualHash != null
+						group c by c.PerceptualHash
+						into g
+						where g.Count() > 1
+						//orderby g.Count() descending
+						select new { hashVal = g.Key, Count = g.Count() };
+			}
 		}
 
         private static void CheckSumDup_upsert(DupOnHash dupOnHash, bool verbose, ref int insertCheckSumDupsCount, ref int updateCheckSumDupsBasedOnCount, ref int insertCheckSumDupsBasedOnCount)
