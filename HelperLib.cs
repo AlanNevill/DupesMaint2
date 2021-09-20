@@ -17,6 +17,7 @@ using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
 using System.Data.Common;
+using System.Threading.Tasks;
 
 namespace DupesMaint2
 {
@@ -104,8 +105,8 @@ namespace DupesMaint2
 
 			if (replace)
 			{
-				//using IDbConnection db = new SqlConnection(ConnectionString);
-				//db.Execute("truncate table dbo.CheckSum");
+				using IDbConnection db = new SqlConnection(ConnectionString);
+				db.Execute("truncate table dbo.CheckSum");
 			}
 
 			// main processing
@@ -133,10 +134,10 @@ namespace DupesMaint2
 			string logMessage;
 
 			// get a list of all CheckSum rows 
-			var checkSums = popsDbContext.CheckSums;
-			Serilog.Log.Information($"CalculateHashes - Found checkSums.Count: {checkSums.LongCount():N0}");
+			//var checkSums = popsDbContext.CheckSums;
+			Serilog.Log.Information($"CalculateHashes - Found checkSums.Count: {popsDbContext.CheckSums.LongCount():N0}");
 
-			foreach (var checkSum in checkSums)
+			foreach (var checkSum in popsDbContext.CheckSums)
 			{
 				// drop where MediaFileType is not 'Unknown'
 				if (checkSum.MediaFileType == "Unknown")
@@ -153,14 +154,14 @@ namespace DupesMaint2
 				}
 
 
-				// type can have numeric hashes calculated
+				// type can have hashes calculated
 				FileInfo fileInfo = new(checkSum.FileFullName);
 
 
 				try    // Calculate the requested hashes
 				{
                     // calculate the Sha hash
-                    if (ShaHash)
+                    if (ShaHash && checkSum.Sha is null)
                     {
 						checkSum.Sha = calcShaHash(fileInfo);
                     }
@@ -175,15 +176,15 @@ namespace DupesMaint2
 						continue;
 					}
 
-					if (averageHash)
+					if (averageHash && checkSum.AverageHash is null)
 					{
 						checkSum.AverageHash = calcAverageHash(fileInfo);
 					}
-					if (differenceHash)
+					if (differenceHash && checkSum.DifferenceHash is null)
 					{
 						checkSum.DifferenceHash = calcDifferenceHash(fileInfo);
 					}
-					if (perceptualHash)
+					if (perceptualHash && checkSum.PerceptualHash is null)
 					{
 						checkSum.PerceptualHash = calcPerceptualHash(fileInfo);
 					}
@@ -212,11 +213,11 @@ namespace DupesMaint2
 
 				if ((++processedCount + dropCount) % 1000 == 0)
 				{
-					Serilog.Log.Information($"CalculateHashes - {processedCount + dropCount,6:N0}. Completed:{(((processedCount + dropCount) * 100) / checkSums.LongCount()),3:N0}%.");
+					Serilog.Log.Information($"CalculateHashes - {processedCount + dropCount,6:N0}. Completed:{(((processedCount + dropCount) * 100) / popsDbContext.CheckSums.LongCount()),3:N0}%.");
 				}
 
 			}
-			Serilog.Log.Information($"CalculateHashes - Finished processing checkSums.Count: {checkSums.LongCount():N0}, processedCount: {processedCount:N0}, dropCount: {dropCount:N0}.");
+			Serilog.Log.Information($"CalculateHashes - Finished processing checkSums.Count: {popsDbContext.CheckSums.LongCount():N0}, processedCount: {processedCount:N0}, dropCount: {dropCount:N0}.");
 
 			// update the database
 			popsDbContext.SaveChanges();
@@ -261,40 +262,83 @@ namespace DupesMaint2
 
 		}
 
-
-		public void Tester()
+		/// <summary>
+		/// Move all but the largest CheckSum files with the same PerceptualHash to a folder on the H drive
+		/// </summary>
+		/// <param name="verbose"></param>
+		public void PerceptualHash_Move2Hdrive(bool verbose)
         {
-            //var connectioString = _config.GetValue<string>("PopsDB");
-            //Serilog.Log.Information($"\tconnectionString: {connectioString}\n\t\tConnectionString: {ConnectionString}");
+			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
+			int counter = 0;
+			PopsDbContext popsDbContext = new();
 
-            using PopsDbContext popsDbContext = new();
- 
-			//CheckSumDupsBasedOn checkSumDupsBasedOn = new()
-			//{
+			var perceptualHashes = from p in popsDbContext.CheckSums
+								   where p.PerceptualHash != null
+								   group p by p.PerceptualHash into g
+								   where g.Count() > 1
+								   orderby g.Count() descending
+								   select new { g.Key, Count = g.Count() };
 
-			//	CheckSumId = -2,
-			//	DupBasedOn = "Test -1",
-			//	BasedOnVal = "Test -1",
-			//};
+			Serilog.Log.Information($"perceptualHashes.LongCount(): {perceptualHashes.LongCount():N0}");
+  
+			foreach (var perceptualHash in perceptualHashes)
+			{
+				PopsDbContext popsDbContext1 = new();
+				List<CheckSum> checkSums = popsDbContext1.CheckSums.Where(y => y.PerceptualHash == perceptualHash.Key).ToList();
+				int maxSize = checkSums.Max(y => y.FileSize);
+				Serilog.Log.Information($"perceptualHash.Key: {perceptualHash.Key}, checkSums.Count: {checkSums.Count}, maxSize: {maxSize:N0}");
 
-			CheckSumDups checkSumDups = new()
-            {
-                CheckSumId = -3,
-                ToDelete = "N",
-            };
-
-
-            checkSumDups.CheckSumDupsBasedOnRows.Add(
-                new CheckSumDupsBasedOn
+                foreach (var checkSum in checkSums.OrderByDescending(v => v.FileSize))
                 {
-                    CheckSumId = checkSumDups.CheckSumId,
-                    DupBasedOn = "Test -3",
-                    BasedOnVal = "Test -3",
-                });
+                    if (checkSum.FileSize == maxSize)
+                    {
+						Serilog.Log.Information($"PerceptualHash_Move2Hdrive - checkSum.Id: {checkSum.Id}, has maxSize: {maxSize:N0} and will not be moved");
+						continue;
+					}
 
-            popsDbContext.Add(checkSumDups);
-            popsDbContext.SaveChanges();
-        }
+					// Move this CheckSum file
+					MoveTheFile(checkSum, popsDbContext1);
+
+					counter++;
+				}
+			}
+
+			_stopwatch.Stop();
+			Serilog.Log.Information($"PerceptualHash_Move2Hdrive - Total execution time: {_stopwatch.Elapsed.TotalMinutes:N0} mins.\n{new String('-', 150)}");
+
+			//////////////////
+			// Local functions
+			//////////////////
+			void MoveTheFile(CheckSum checkSum, PopsDbContext popsDbContext1)
+            {
+				// Generate the new folder and create if necessary
+				DirectoryInfo directoryInfo = new(Path.Combine(@"H:\PerceptualHashes", checkSum.PerceptualHash.ToString()));
+                if (!directoryInfo.Exists)
+                {
+					directoryInfo.Create();
+                }
+
+                // Move the file
+                try
+                {
+					File.Move(checkSum.FileFullName, Path.Combine(directoryInfo.FullName, checkSum.TheFileName),true);
+                }
+                catch (FileNotFoundException fnf)    // source file not found
+                {
+					Serilog.Log.Error($"PerceptualHash_Move2Hdrive - File not found, checkSum.Id: {checkSum.Id}\n{fnf}");
+                }
+
+				// Update the checkSum row
+				checkSum.Folder = directoryInfo.FullName;
+				popsDbContext1.SaveChanges();
+
+				if (verbose)
+				{
+					Serilog.Log.Information($"PerceptualHash_Move2Hdrive - checkSum.Id: {checkSum.Id}, checkSum.FileSize: {checkSum.FileSize:N0} was moved to: {checkSum.Folder}");
+				}
+			}
+
+		}
 
 		// TODO: ONLY WORKS FOR ShaHash & PerceptualHash
 		public static void FindDupsUsingHash(string hash, bool verbose)
@@ -585,36 +629,61 @@ namespace DupesMaint2
 			FileInfo[] _files = folder.GetFiles("*.JPG", SearchOption.AllDirectories);
 			Serilog.Log.Information($"ProcessFiles - Found {_files.Length:N0} files to process.");
 
-			// Process all the JPG files in the source directory tree
-			foreach (FileInfo fileInfo in _files)
-			{
-				// calculate the SHA string for the file and return it with the time taken in ms in a tuple
-				//(string SHA, int timerMs) = CalcSHA(fileInfo);
+            //Parallel.ForEach(_files, file =>
+            //{
+            //	// instantiate a new CheckSum object for the file
+            //	CheckSum checkSum = new CheckSum
+            //	{
+            //		Folder = file.DirectoryName,
+            //		TheFileName = file.Name,
+            //		FileExt = file.Extension.ToUpper(),
+            //		FileSize = (int)file.Length,
+            //		FileCreateDt = file.CreationTime,
+            //		TimerMs = 0,
+            //	};
 
-				// instantiate a new CheckSum object for the file
-				CheckSum checkSum = new CheckSum
-				{
-					//Sha = SHA,
-					Folder = fileInfo.DirectoryName,
-					TheFileName = fileInfo.Name,
-					FileExt = fileInfo.Extension.ToUpper(),
-					FileSize = (int)fileInfo.Length,
-					FileCreateDt = fileInfo.CreationTime,
-					TimerMs = 0,
-				};
+            //	checkSums.Add(checkSum);
+            //	//popsDbContext.Add(checkSum);
 
-				popsDbContext.Add(checkSum);
+            //	if (++_count % 1000 == 0)
+            //	{
+            //		process100Watch.Stop();
+            //		Serilog.Log.Information($"ProcessFiles - {_count}. Last 100 in {process100Watch.Elapsed.Seconds} secs. Completed: {(_count * 100) / _files.Length}%. Processing folder: {file.DirectoryName}");
+            //		process100Watch.Reset();
+            //		process100Watch.Start();
+            //	}
+            //});
 
-				if (++_count % 1000 == 0)
-				{
-					process100Watch.Stop();
-					Serilog.Log.Information($"ProcessFiles - {_count}. Last 100 in {process100Watch.Elapsed.Seconds} secs. Completed: {(_count * 100) / _files.Length}%. Processing folder: {fileInfo.DirectoryName}");
-					process100Watch.Reset();
-					process100Watch.Start();
-				}
-			}
+            // Process all the JPG files in the source directory tree
+            foreach (FileInfo fileInfo in _files)
+            {
+                // calculate the SHA string for the file and return it with the time taken in ms in a tuple
+                //(string SHA, int timerMs) = CalcSHA(fileInfo);
 
-			popsDbContext.SaveChanges();
+                // instantiate a new CheckSum object for the file
+                CheckSum checkSum = new CheckSum
+                {
+                    //Sha = SHA,
+                    Folder = fileInfo.DirectoryName,
+                    TheFileName = fileInfo.Name,
+                    FileExt = fileInfo.Extension.ToUpper(),
+                    FileSize = (int)fileInfo.Length,
+                    FileCreateDt = fileInfo.CreationTime,
+                    TimerMs = 0,
+                };
+
+                popsDbContext.Add(checkSum);
+
+                if (++_count % 1000 == 0)
+                {
+                    process100Watch.Stop();
+                    Serilog.Log.Information($"ProcessFiles - {_count}. Last 100 in {process100Watch.Elapsed.Seconds} secs. Completed: {(_count * 100) / _files.Length}%. Processing folder: {fileInfo.DirectoryName}");
+                    process100Watch.Reset();
+                    process100Watch.Start();
+                }
+            }
+
+            popsDbContext.SaveChanges();
 			return _count;
 		}
 

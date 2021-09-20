@@ -89,15 +89,14 @@ namespace DupesMaint2
 			rootCommand.AddCommand(command6);
 			#endregion
 
-
-			// Command7 - Tester
-			#region "subcommand7 Tester
-			Command command7 = new("Tester", "Tester")
+			// Command7 - PerceptualHash_Move2Hdrive
+			#region "subcommand7 PerceptualHash_Move2Hdrive
+			Command command7 = new("PerceptualHash_Move2Hdrive", "PerceptualHash_Move2Hdrive")
 			{
 				new Option<bool>("--verbose", getDefaultValue: () =>false, "Verbose logging.")
 					.AddSuggestions("true","false")
 			};
-			command7.Handler = CommandHandler.Create(() => { var hL = new HelperLib();  hL.Tester(); });
+			command7.Handler = CommandHandler.Create((bool verbose) => { var hL = new HelperLib();  hL.PerceptualHash_Move2Hdrive(verbose); });
 			rootCommand.AddCommand(command7);
 			#endregion
 

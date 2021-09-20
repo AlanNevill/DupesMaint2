@@ -6,14 +6,7 @@
     <Server>SNOWBALL\MSSQLSERVER01</Server>
     <Database>Photos</Database>
   </Connection>
+  <Output>DataGrids</Output>
 </Query>
 
-from c in CheckSums
-						where c.SHA != null
-						group c by c.SHA
-						into g
-						where g.Count() > 1
-						//orderby g.Count() descending
-						select new { hashVal = g.Key, Count = g.Count()}
-								  
-								  
+(from p in CheckSumDupsBasedOns where p.DupBasedOn == "ShaHash" group p by p.BasedOnVal into g select new {g.Key, Count = g.Count()}).Take(10)

@@ -21,7 +21,7 @@ Example:  --folder "`C:\\Users\\User\\OneDrive\\Photos`"
 
 ### --replace <u>true</u>/false
 
-Replace default (true) or append (false) to the database tables POPS.CheckSum & POPS.CheckSumDupes.
+Replace default (true) or append (false) to the database table Photos.CheckSum.
 
 Example: `--replace false`
 
@@ -96,9 +96,13 @@ Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
 
 ## Subcommand5  CalculateHashes
 
-Calculate and store up to 3 perceptual hashes in the CheckSum table.
+Calculate and store up to 4 hashes in the CheckSum table.
 
-### --averageHash	true/<u>false</u>
+### --ShaHash				true/<u>false</u>
+
+Claculate the SHA 256 value for the column.
+
+### --averageHash		true/<u>false</u>
 
 Calculate the AverageHash column.
 
@@ -110,7 +114,7 @@ Calculate the DifferenceHash column.
 
 Calculate the PerceptualHash column.
 
-### --verbose	true/<u>false</u>
+### --verbose					true/<u>false</u>
 
 Verbose logging.
 
