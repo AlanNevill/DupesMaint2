@@ -93,14 +93,20 @@ namespace DupesMaint2
 
 
 		/// <summary>
-		/// Root Command - Process
-		/// 
+		/// Root Command - LoadFileType
+		/// Read all the files in a folder root tree and process all the files of the selected media type
 		/// </summary>
 		/// <param name="folder">DirectoryInfo - root folder to the folder structure.</param>
+		/// <param name="fileType">string - Either 'Photo' or 'Video'.</param>
 		/// <param name="replace">Bool - If true truncate table CheckSum else add rows.</param>
-		public static void Process(DirectoryInfo folder, bool replace)
+		/// <param name="verbose">Bool - If true then verbose logging.</param>
+		public static void LoadFileType(DirectoryInfo folder, string fileType, bool replace, bool verbose)
 		{
-			Serilog.Log.Information($"Process - Starting find duplicates in target folder is {folder.FullName}\tTruncate table CheckSum is: {replace}.");
+			Serilog.Log.Information($"LoadFileType - Starting root source folder: {folder.FullName}\n\t" +
+				$"fileType: {fileType}\n\t" +
+				$"Truncate table CheckSum: {replace}.\n\t" +
+				$"Verbose logging: {verbose}\n");
+
 			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
 			if (replace)
@@ -110,10 +116,70 @@ namespace DupesMaint2
 			}
 
 			// main processing
-			int fileCount = ProcessFiles(folder);
+			PopsDbContext popsDbContext = new();
+			List<CheckSum> checkSums = new();
+
+			int processCount = 0, dropCount = 0;
+			FileInfo[] _files = folder.GetFiles("*", SearchOption.AllDirectories);
+			Serilog.Log.Information($"LoadFileType - Found {_files.Length:N0} files under the root folder.");
+
+			// LoadFileType all the JPG files in the source directory tree
+			foreach (FileInfo fileInfo in _files)
+			{
+				var type = fileExtensionTypes.Find(e => e.Type == fileInfo.Extension.ToUpper());
+				if (type is null)
+				{
+					dropCount++;
+					Serilog.Log.Warning($"LoadFileType - File extension: {fileInfo.Extension} not found in fileExtensionTypes.");
+					continue;
+				}
+
+				// check that the file is of the selected media type
+                if (type.Group != fileType)
+                {
+					dropCount++;
+					if (verbose)
+                    {
+                        Serilog.Log.Information($"LoadFileType - Ignored file extension: {fileInfo.Extension}, not of media type: {fileType}.");
+                    }
+                    continue;
+				}
+
+				int existsCount = popsDbContext.CheckSums.Where(x => x.FileFullName == fileInfo.FullName).Count();
+                if (existsCount != 0)
+                {
+					Serilog.Log.Warning($"LoadFileType - fileInfo.FullName: {fileInfo.FullName} already loaded in CheckSum table.");
+					continue;
+				}
+
+				// instantiate a new CheckSum object for the file
+				CheckSum checkSum = new CheckSum
+				{
+					Folder = fileInfo.DirectoryName,
+					TheFileName = fileInfo.Name,
+					FileExt = fileInfo.Extension.ToUpper(),
+					FileSize = (int)fileInfo.Length,
+					FileCreateDt = fileInfo.CreationTime,
+					MediaFileType = fileType,
+					TimerMs = 0,
+				};
+
+				popsDbContext.Add(checkSum);
+				if (verbose)
+				{
+					Serilog.Log.Information($"LoadFileType - File {checkSum.FileFullName}, was added to CheckSum table.");
+				}
+
+				if (++processCount % 1000 == 0)
+				{
+					Serilog.Log.Information($"LoadFileType - {processCount,6:N0}. Completed: {(processCount * 100) / _files.Length}%. Processing folder: {fileInfo.DirectoryName}");
+				}
+			}
+
+			popsDbContext.SaveChanges();
 
 			_stopwatch.Stop();
-			Serilog.Log.Information($"Process - Total execution time: {_stopwatch.Elapsed.Minutes:N1} mins. # of files processed: {fileCount}\n.{new String('-', 150)}\n");
+			Serilog.Log.Information($"LoadFileType - Total execution time: {_stopwatch.Elapsed.Minutes:N1} mins. processCount: {processCount:N0}, dropCount: {dropCount:N0}\n.{new String('-', 150)}\n");
 		}
 
 
@@ -284,7 +350,16 @@ namespace DupesMaint2
 			foreach (var perceptualHash in perceptualHashes)
 			{
 				PopsDbContext popsDbContext1 = new();
-				List<CheckSum> checkSums = popsDbContext1.CheckSums.Where(y => y.PerceptualHash == perceptualHash.Key).ToList();
+				popsDbContext1.Database.SetCommandTimeout(TimeSpan.FromMinutes(2));
+
+				List<CheckSum> checkSums = popsDbContext1.CheckSums
+					.Where(y => y.PerceptualHash == perceptualHash.Key && y.Folder.StartsWith(@"C:\Users\User"))
+					.ToList();
+
+                if (checkSums.Count == 0)
+                {
+					continue;
+                }
 				int maxSize = checkSums.Max(y => y.FileSize);
 				Serilog.Log.Information($"perceptualHash.Key: {perceptualHash.Key}, checkSums.Count: {checkSums.Count}, maxSize: {maxSize:N0}");
 
@@ -543,7 +618,7 @@ namespace DupesMaint2
 		}
 
 		/// <summary>
-		/// Command2 - Process all the files in the folder tree passed in and add rows to CheckSum table
+		/// Command2 - LoadFileType all the files in the folder tree passed in and add rows to CheckSum table
 		/// </summary>
 		/// <param name="folder">DirectoryInfo - root folder to the folder structure.</param>
 		/// <param name="replace">Bool - If True truncate the CheckSum table else add rows.</param>
@@ -614,81 +689,9 @@ namespace DupesMaint2
 		}
 
 
-		/// <summary>
-		/// ProcessFiles - Process all the .JPG files in a folder structure
-		/// </summary>
-		/// <param name="folder">DirectoryInfo - The root folder to search.</param>
-		/// <returns>Int - Number of files processed</returns>
-		private static int ProcessFiles(DirectoryInfo folder)
-		{
-			System.Diagnostics.Stopwatch process100Watch = System.Diagnostics.Stopwatch.StartNew();
-			PopsDbContext popsDbContext = new();
-			List<CheckSum> checkSums = new();
-
-			int _count = 0;
-			FileInfo[] _files = folder.GetFiles("*.JPG", SearchOption.AllDirectories);
-			Serilog.Log.Information($"ProcessFiles - Found {_files.Length:N0} files to process.");
-
-            //Parallel.ForEach(_files, file =>
-            //{
-            //	// instantiate a new CheckSum object for the file
-            //	CheckSum checkSum = new CheckSum
-            //	{
-            //		Folder = file.DirectoryName,
-            //		TheFileName = file.Name,
-            //		FileExt = file.Extension.ToUpper(),
-            //		FileSize = (int)file.Length,
-            //		FileCreateDt = file.CreationTime,
-            //		TimerMs = 0,
-            //	};
-
-            //	checkSums.Add(checkSum);
-            //	//popsDbContext.Add(checkSum);
-
-            //	if (++_count % 1000 == 0)
-            //	{
-            //		process100Watch.Stop();
-            //		Serilog.Log.Information($"ProcessFiles - {_count}. Last 100 in {process100Watch.Elapsed.Seconds} secs. Completed: {(_count * 100) / _files.Length}%. Processing folder: {file.DirectoryName}");
-            //		process100Watch.Reset();
-            //		process100Watch.Start();
-            //	}
-            //});
-
-            // Process all the JPG files in the source directory tree
-            foreach (FileInfo fileInfo in _files)
-            {
-                // calculate the SHA string for the file and return it with the time taken in ms in a tuple
-                //(string SHA, int timerMs) = CalcSHA(fileInfo);
-
-                // instantiate a new CheckSum object for the file
-                CheckSum checkSum = new CheckSum
-                {
-                    //Sha = SHA,
-                    Folder = fileInfo.DirectoryName,
-                    TheFileName = fileInfo.Name,
-                    FileExt = fileInfo.Extension.ToUpper(),
-                    FileSize = (int)fileInfo.Length,
-                    FileCreateDt = fileInfo.CreationTime,
-                    TimerMs = 0,
-                };
-
-                popsDbContext.Add(checkSum);
-
-                if (++_count % 1000 == 0)
-                {
-                    process100Watch.Stop();
-                    Serilog.Log.Information($"ProcessFiles - {_count}. Last 100 in {process100Watch.Elapsed.Seconds} secs. Completed: {(_count * 100) / _files.Length}%. Processing folder: {fileInfo.DirectoryName}");
-                    process100Watch.Reset();
-                    process100Watch.Start();
-                }
-            }
-
-            popsDbContext.SaveChanges();
-			return _count;
-		}
 
 
-		// Process the duplicate rows in the CheckSum table and report files to delete or report AND delete.
+		// LoadFileType the duplicate rows in the CheckSum table and report files to delete or report AND delete.
 		public static void DeleteDupes(bool delete)
 		{
 			throw new NotImplementedException();

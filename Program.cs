@@ -20,13 +20,16 @@ namespace DupesMaint2
 
 			// Using Arity example:  new Option("--sport", argument: new Argument<string> { Arity = ArgumentArity.ExactlyOne })
 
-			RootCommand rootCommand = new RootCommand("DupesMaintConsole")
+			RootCommand rootCommand = new RootCommand("Load File Type")
 				{
 					new Option<DirectoryInfo>("--folder", "The root folder of the tree to scan which must exist, 'F:/Picasa backup/c/photos'.").ExistingOnly(),
-					new Option<bool>("--replace", getDefaultValue: () => true,  "Replace default (true) or append (false) to the db tables CheckSum & CheckSumDupes.") {IsRequired = false } 
+					new Option<string>("--fileType",  "File media type to load, Photo or Video.").FromAmong("Photo","Video"),
+					new Option<bool>("--replace", getDefaultValue: () => false,  "Replace default (true) or append (false) to the db tables CheckSum & CheckSumDupes.") {IsRequired = false },
+					new Option<bool>("--verbose", getDefaultValue: () => false,  "Verbose logging.") {IsRequired = false }
 				};
 			// setup the root command handler
-			rootCommand.Handler = CommandHandler.Create((DirectoryInfo folder, bool replace) => { HelperLib.Process(folder, replace); });
+			rootCommand.Handler = CommandHandler.Create((DirectoryInfo folder, string fileType, bool replace, bool verbose) => 
+				{ HelperLib.LoadFileType(folder, fileType, replace, verbose); });
 
 
 			// sub command to extract EXIF date/time from all JPG image files in a folder tree
