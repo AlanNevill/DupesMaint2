@@ -97,6 +97,12 @@ namespace DupesMaint2.Models
                     .IsUnicode(false)
                     .HasColumnName("SHA");
 
+                entity.Property(e => e.FormatValid)
+                    .IsRequired()
+                    .HasDefaultValueSql("Y")
+                    .HasMaxLength(1)
+                    .IsUnicode(false);
+
                 entity.Property(e => e.TheFileName)
                     .IsRequired()
                     .HasMaxLength(200)

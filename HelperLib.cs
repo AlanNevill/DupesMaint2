@@ -18,6 +18,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Linq;
 using System.Data.Common;
 using System.Threading.Tasks;
+using System.Threading;
 
 namespace DupesMaint2
 {
@@ -89,6 +90,10 @@ namespace DupesMaint2
 			new FileExtensionTypes { Type = ".JPEG", Group = "Photo" },
 			new FileExtensionTypes { Type = ".JPG", Group = "Photo" },
 			new FileExtensionTypes { Type = ".PNG", Group = "Photo" },
+			new FileExtensionTypes { Type = ".MP4", Group = "Video" },
+			new FileExtensionTypes { Type = ".MPG", Group = "Video" },
+			new FileExtensionTypes { Type = ".3GP", Group = "Video" },
+			new FileExtensionTypes { Type = ".AVI", Group = "Video" },
 		};
 
 
@@ -201,45 +206,46 @@ namespace DupesMaint2
 
 			// get a list of all CheckSum rows 
 			//var checkSums = popsDbContext.CheckSums;
-			Serilog.Log.Information($"CalculateHashes - Found checkSums.Count: {popsDbContext.CheckSums.LongCount():N0}");
+			//Serilog.Log.Information($"CalculateHashes - Found checkSums.Count: {popsDbContext.CheckSums.LongCount():N0}");
 
-			foreach (var checkSum in popsDbContext.CheckSums)
-			{
-				// drop where MediaFileType is not 'Unknown'
-				if (checkSum.MediaFileType == "Unknown")
+			Serilog.Log.Information($"CalculateHashes - Starting Parallel.ForEach, checkSums.Count: {popsDbContext.CheckSums.LongCount():N0}");
+			var parallel = Parallel.ForEach(popsDbContext.CheckSums,
+				new ParallelOptions
 				{
-					dropCount++;
-					continue;
+					// multiply the count because a processor has 2 cores
+					MaxDegreeOfParallelism = Convert.ToInt32(Math.Ceiling((Environment.ProcessorCount * 0.5) * 2.0))
+				}, checkSum =>
+				{
+				// drop where MediaFileType is not 'Unknown' or FormatValid is (N)o
+				if (checkSum.MediaFileType == "Unknown" || checkSum.FormatValid == "N")
+				{
+					Interlocked.Increment(ref dropCount);
+					return;
 				}
 
 				var type = fileExtensionTypes2Hashing.Find(e => e.Type == checkSum.FileExt);
 				if (type is null)
 				{
-					dropCount++;
-					continue;
+					Interlocked.Increment(ref dropCount);
+					return;
 				}
-
 
 				// type can have hashes calculated
 				FileInfo fileInfo = new(checkSum.FileFullName);
 
-
 				try    // Calculate the requested hashes
 				{
-                    // calculate the Sha hash
-                    if (ShaHash && checkSum.Sha is null)
-                    {
-						checkSum.Sha = calcShaHash(fileInfo);
-                    }
+					// calculate the Sha hash
+					if (ShaHash && checkSum.Sha is null)
+					{
+						checkSum.Sha = calcShaHash2(fileInfo);
+					}
 
 					// image processor seems to have a limit on file size
 					if (fileInfo.Length > 71000000)
 					{
-						logMessage = $"CalculateHashes - id: {checkSum.Id}, fileInfo.Length: {fileInfo.Length,12:N0}, greater than limit 71,000,000";
-						checkSum.Notes2 = logMessage;
-						Serilog.Log.Warning(logMessage);
-						dropCount++;
-						continue;
+						Interlocked.Increment(ref dropCount);
+						return;
 					}
 
 					if (averageHash && checkSum.AverageHash is null)
@@ -257,10 +263,12 @@ namespace DupesMaint2
 				}
 				catch (SixLabors.ImageSharp.UnknownImageFormatException exc)
 				{
+					checkSum.FormatValid = "N";
 					Serilog.Log.Error($"CalculateHashes - id: {checkSum.Id}, exc: {exc.Message}\n{new String('-', 150)}\n");
 				}
 				catch (SixLabors.ImageSharp.InvalidImageContentException iIcE)
 				{
+					checkSum.FormatValid = "N";
 					Serilog.Log.Error($"CalculateHashes - id: {checkSum.Id}, iIcE: {iIcE.Message}\n{new String('-', 150)}\n");
 				}
 				catch (FileNotFoundException fnfEx)
@@ -277,13 +285,95 @@ namespace DupesMaint2
 					Serilog.Log.Information($"CalculateHashes - id: {checkSum.Id}, checkSum.AverageHash: {checkSum.AverageHash}, checkSum.DifferenceHash: {checkSum.DifferenceHash}, checkSum.PerceptualHash: {checkSum.PerceptualHash}.");
 				}
 
-				if ((++processedCount + dropCount) % 1000 == 0)
+				Interlocked.Increment(ref processedCount);
+				if ((processedCount + dropCount) % 1000 == 0)
 				{
 					Serilog.Log.Information($"CalculateHashes - {processedCount + dropCount,6:N0}. Completed:{(((processedCount + dropCount) * 100) / popsDbContext.CheckSums.LongCount()),3:N0}%.");
 				}
+			});
 
-			}
-			Serilog.Log.Information($"CalculateHashes - Finished processing checkSums.Count: {popsDbContext.CheckSums.LongCount():N0}, processedCount: {processedCount:N0}, dropCount: {dropCount:N0}.");
+			//foreach (var checkSum in popsDbContext.CheckSums)
+			//{
+			//	// drop where MediaFileType is not 'Unknown'
+			//	if (checkSum.MediaFileType == "Unknown")
+			//	{
+			//		dropCount++;
+			//		continue;
+			//	}
+
+			//	var type = fileExtensionTypes2Hashing.Find(e => e.Type == checkSum.FileExt);
+			//	if (type is null)
+			//	{
+			//		dropCount++;
+			//		continue;
+			//	}
+
+
+			//	// type can have hashes calculated
+			//	FileInfo fileInfo = new(checkSum.FileFullName);
+
+
+			//	try    // Calculate the requested hashes
+			//	{
+   //                 // calculate the Sha hash
+   //                 if (ShaHash && checkSum.Sha is null)
+   //                 {
+			//			checkSum.Sha = calcShaHash(fileInfo);
+   //                 }
+
+			//		// image processor seems to have a limit on file size
+			//		if (fileInfo.Length > 71000000)
+			//		{
+			//			logMessage = $"CalculateHashes - id: {checkSum.Id}, fileInfo.Length: {fileInfo.Length,12:N0}, greater than limit 71,000,000";
+			//			checkSum.Notes2 = logMessage;
+			//			Serilog.Log.Warning(logMessage);
+			//			dropCount++;
+			//			continue;
+			//		}
+
+			//		if (averageHash && checkSum.AverageHash is null)
+			//		{
+			//			checkSum.AverageHash = calcAverageHash(fileInfo);
+			//		}
+			//		if (differenceHash && checkSum.DifferenceHash is null)
+			//		{
+			//			checkSum.DifferenceHash = calcDifferenceHash(fileInfo);
+			//		}
+			//		if (perceptualHash && checkSum.PerceptualHash is null)
+			//		{
+			//			checkSum.PerceptualHash = calcPerceptualHash(fileInfo);
+			//		}
+			//	}
+			//	catch (SixLabors.ImageSharp.UnknownImageFormatException exc)
+			//	{
+			//		Serilog.Log.Error($"CalculateHashes - id: {checkSum.Id}, exc: {exc.Message}\n{new String('-', 150)}\n");
+			//	}
+			//	catch (SixLabors.ImageSharp.InvalidImageContentException iIcE)
+			//	{
+			//		Serilog.Log.Error($"CalculateHashes - id: {checkSum.Id}, iIcE: {iIcE.Message}\n{new String('-', 150)}\n");
+			//	}
+			//	catch (FileNotFoundException fnfEx)
+			//	{
+			//		Serilog.Log.Error($"CalculateHashes - id: {checkSum.Id}, fnfEx: {fnfEx.Message}\n{new String('-', 150)}\n");
+			//	}
+			//	catch (Exception ex)
+			//	{
+			//		Serilog.Log.Error($"CalculateHashes - id: {checkSum.Id}\nex: {ex}\n{new String('-', 150)}\n");
+			//	}
+
+			//	if (verbose)
+			//	{
+			//		Serilog.Log.Information($"CalculateHashes - id: {checkSum.Id}, checkSum.AverageHash: {checkSum.AverageHash}, checkSum.DifferenceHash: {checkSum.DifferenceHash}, checkSum.PerceptualHash: {checkSum.PerceptualHash}.");
+			//	}
+
+			//	if ((++processedCount + dropCount) % 1000 == 0)
+			//	{
+			//		Serilog.Log.Information($"CalculateHashes - {processedCount + dropCount,6:N0}. Completed:{(((processedCount + dropCount) * 100) / popsDbContext.CheckSums.LongCount()),3:N0}%.");
+			//	}
+
+			//}
+			Serilog.Log.Information($"CalculateHashes - Finished processing, parallel.ToString: {parallel.ToString()} " +
+				$"checkSums.Count: {popsDbContext.CheckSums.LongCount():N0}, processedCount: {processedCount:N0}, dropCount: {dropCount:N0}.");
 
 			// update the database
 			popsDbContext.SaveChanges();
@@ -296,7 +386,7 @@ namespace DupesMaint2
 			////////////////
 			string calcShaHash(FileInfo fileInfo)
 			{
-				// calculate the SHA256 checksum for the file and return it with the elapsed processing time using a tuple
+				// calculate the SHA256 checkSum for the file and return it with the elapsed processing time using a tuple
 
 					FileStream fs = fileInfo.OpenRead();
 					//fs.Position = 0;
@@ -328,11 +418,25 @@ namespace DupesMaint2
 
 		}
 
-		/// <summary>
-		/// Move all but the largest CheckSum files with the same PerceptualHash to a folder on the H drive
-		/// </summary>
-		/// <param name="verbose"></param>
-		public void PerceptualHash_Move2Hdrive(bool verbose)
+	public static string calcShaHash2(FileInfo fileInfo)
+	{
+		// calculate the SHA256 checkSum for the file and return it with the elapsed processing time using a tuple
+
+		FileStream fs = fileInfo.OpenRead();
+		//fs.Position = 0;
+
+		// ComputeHash - returns byte array  
+		byte[] bytes = SHA256.Create().ComputeHash(fs);
+
+		// BitConverter used to put all bytes into one string, hyphen delimited  
+		return BitConverter.ToString(bytes);
+	}
+
+	/// <summary>
+	/// Move all but the largest CheckSum files with the same PerceptualHash to a folder on the H drive
+	/// </summary>
+	/// <param name="verbose"></param>
+	public void PerceptualHash_Move2Hdrive(bool verbose)
         {
 			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 			int counter = 0;
@@ -762,7 +866,7 @@ namespace DupesMaint2
 		}
 
 
-		// calculate the SHA256 checksum for the file and return it with the elapsed processing time using a tuple
+		// calculate the SHA256 checkSum for the file and return it with the elapsed processing time using a tuple
 		private static (string SHA, int timerMs) CalcSHA(FileInfo fi)
 		{
 			System.Diagnostics.Stopwatch watch = System.Diagnostics.Stopwatch.StartNew();

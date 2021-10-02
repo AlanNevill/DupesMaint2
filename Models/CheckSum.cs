@@ -28,6 +28,7 @@ namespace DupesMaint2.Models
         public decimal? AverageHash { get; set; }
         public decimal? DifferenceHash { get; set; }
         public decimal? PerceptualHash { get; set; }
+        public string FormatValid { get; set; }
         public string FileFullName { get; set; }
     }
 }
