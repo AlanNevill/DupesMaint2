@@ -55,18 +55,19 @@ namespace DupesMaint2
 			#endregion
 
 
-			// Command4 - Delete duplicates
-			#region "subcommand4 deleteDups"
-			Command command4 = new Command("deleteDups","Delete the duplicate files.")
+			// Command4 - CameraRoll_Move
+			#region "subcommand4 CameraRoll_Move"
+			Command command4 = new ("CameraRoll_Move", "Move media file types from CameraRoll folder to date folders.")
 			{
-				new Option<bool>("--delete", getDefaultValue: () => false, "Replace default (true) or append (false) to the db tables CheckSum.") { IsRequired = true }
+				new Option<string>("--mediaFileType", "Photo or Video").FromAmong("Photo","Video"),
+				new Option<bool>("--verbose", getDefaultValue: () => false, "Verbose logging") { IsRequired = false }
 			};
-			command4.Handler = CommandHandler.Create((bool delete) => {HelperLib.DeleteDupes(delete); });
+			command4.Handler = CommandHandler.Create((string mediaFileType, bool verbose) => {HelperLib.CameraRoll_Move(mediaFileType, verbose); });
 			rootCommand.AddCommand(command4);
 			#endregion
 
 
-			// Command5 - calculate and store up to 3 percuptual hashes in the CheckSum table
+			// Command5 - calculate and store up to 3 percuptual hashes and SHA256 in the CheckSum table
 			#region "subcommand5 CalculateHashes - Calculate hashes and store in CheckSum"
 			Command command5 = new ("CalculateHashes", "Calculate and store hashes in the CheckSum table.")
 			{

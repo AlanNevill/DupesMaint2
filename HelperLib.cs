@@ -12,13 +12,36 @@ using System.Data;
 using System.Security.Cryptography;
 using ExifLibrary;
 using MetadataExtractor;
-
+using MetadataExtractor.Formats;
+using MetadataExtractor.Formats.Exif;
+using MetadataExtractor.Formats.Avi;
+using MetadataExtractor.Formats.Bmp;
+using MetadataExtractor.Formats.Eps;
+using MetadataExtractor.Formats.FileSystem;
+using MetadataExtractor.Formats.FileType;
+using MetadataExtractor.Formats.Gif;
+using MetadataExtractor.Formats.Heif;
+using MetadataExtractor.Formats.Ico;
+using MetadataExtractor.Formats.Jpeg;
+using MetadataExtractor.Formats.Mpeg;
+using MetadataExtractor.Formats.Netpbm;
+using MetadataExtractor.Formats.Pcx;
+using MetadataExtractor.Formats.Photoshop;
+using MetadataExtractor.Formats.Png;
+using MetadataExtractor.Formats.QuickTime;
+using MetadataExtractor.Formats.Raf;
+using MetadataExtractor.Formats.Tiff;
+using MetadataExtractor.Formats.Tga;
+using MetadataExtractor.Formats.Wav;
+using MetadataExtractor.Formats.WebP;
+using MetadataExtractor.Util;
 using System.Reflection;
 using Microsoft.EntityFrameworkCore;
 using System.Linq;
 using System.Data.Common;
 using System.Threading.Tasks;
 using System.Threading;
+using DirectoryList = System.Collections.Generic.IReadOnlyList<MetadataExtractor.Directory>;
 
 namespace DupesMaint2
 {
@@ -56,7 +79,7 @@ namespace DupesMaint2
 		}
 
 		// map for file extensions to media group
-		static readonly List<FileExtensionTypes> fileExtensionTypes = new()
+		static readonly List<FileExtensionTypes> _fileExtensionTypes = new()
 		{
 			new FileExtensionTypes { Type = ".3GP", Group = "Video" },
 			new FileExtensionTypes { Type = ".AVI", Group = "Video" },
@@ -83,7 +106,7 @@ namespace DupesMaint2
 		};
 
 		// list of file extensions that can be hashed by the library
-		static readonly List<FileExtensionTypes> fileExtensionTypes2Hashing = new()
+		static readonly List<FileExtensionTypes> _fileExtensionTypes2Hashing = new()
 		{
 			new FileExtensionTypes { Type = ".BMP", Group = "Photo" },
 			new FileExtensionTypes { Type = ".GIF", Group = "Photo" },
@@ -94,6 +117,10 @@ namespace DupesMaint2
 			new FileExtensionTypes { Type = ".MPG", Group = "Video" },
 			new FileExtensionTypes { Type = ".3GP", Group = "Video" },
 			new FileExtensionTypes { Type = ".AVI", Group = "Video" },
+			new FileExtensionTypes { Type = ".MP", Group = "Video" },
+			new FileExtensionTypes { Type = ".MOV", Group = "Video" },
+			new FileExtensionTypes { Type = ".MTS", Group = "Video" },
+			new FileExtensionTypes { Type = ".WMV", Group = "Video" },
 		};
 
 
@@ -131,7 +158,7 @@ namespace DupesMaint2
 			// LoadFileType all the JPG files in the source directory tree
 			foreach (FileInfo fileInfo in _files)
 			{
-				var type = fileExtensionTypes.Find(e => e.Type == fileInfo.Extension.ToUpper());
+				var type = _fileExtensionTypes.Find(e => e.Type == fileInfo.Extension.ToUpper());
 				if (type is null)
 				{
 					dropCount++;
@@ -201,8 +228,8 @@ namespace DupesMaint2
 			PopsDbContext popsDbContext = new PopsDbContext();
 			Serilog.Log.Information($"CalculateHashes - Starting\n\tShaHash: {ShaHash}\n\taverageHash: {averageHash}\n\tdifferenceHash: {differenceHash}\n\tperceptualHash: {perceptualHash}\n\tverbose: {verbose}\n");
 			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
-			int processedCount = 0, dropCount = 0;
-			string logMessage;
+			int processedCount = 0, dropCount = 0, totalCount = 0;
+			//string logMessage;
 
 			// get a list of all CheckSum rows 
 			//var checkSums = popsDbContext.CheckSums;
@@ -213,7 +240,7 @@ namespace DupesMaint2
 				new ParallelOptions
 				{
 					// multiply the count because a processor has 2 cores
-					MaxDegreeOfParallelism = Convert.ToInt32(Math.Ceiling((Environment.ProcessorCount * 0.5) * 2.0))
+					MaxDegreeOfParallelism = Convert.ToInt32(Math.Ceiling((Environment.ProcessorCount * 0.25) ))
 				}, checkSum =>
 				{
 				// drop where MediaFileType is not 'Unknown' or FormatValid is (N)o
@@ -223,7 +250,7 @@ namespace DupesMaint2
 					return;
 				}
 
-				var type = fileExtensionTypes2Hashing.Find(e => e.Type == checkSum.FileExt);
+				var type = _fileExtensionTypes2Hashing.Find(e => e.Type == checkSum.FileExt);
 				if (type is null)
 				{
 					Interlocked.Increment(ref dropCount);
@@ -263,6 +290,7 @@ namespace DupesMaint2
 				}
 				catch (SixLabors.ImageSharp.UnknownImageFormatException exc)
 				{
+					checkSum.MediaFileType = "Unknown";
 					checkSum.FormatValid = "N";
 					Serilog.Log.Error($"CalculateHashes - id: {checkSum.Id}, exc: {exc.Message}\n{new String('-', 150)}\n");
 				}
@@ -286,9 +314,12 @@ namespace DupesMaint2
 				}
 
 				Interlocked.Increment(ref processedCount);
-				if ((processedCount + dropCount) % 1000 == 0)
+				totalCount = 0; 
+				Interlocked.Add(ref totalCount, processedCount);
+				Interlocked.Add(ref totalCount, dropCount);
+				if ((totalCount) % 1000 == 0)
 				{
-					Serilog.Log.Information($"CalculateHashes - {processedCount + dropCount,6:N0}. Completed:{(((processedCount + dropCount) * 100) / popsDbContext.CheckSums.LongCount()),3:N0}%.");
+					Serilog.Log.Information($"CalculateHashes - {totalCount,6:N0}. Completed:{(((totalCount) * 100) / popsDbContext.CheckSums.LongCount()),3:N0}%.");
 				}
 			});
 
@@ -519,7 +550,13 @@ namespace DupesMaint2
 
 		}
 
-		// TODO: ONLY WORKS FOR ShaHash & PerceptualHash
+		/// <summary>
+		/// Deprecated as CheckSumDup table no longer used
+		/// ONLY WORKS FOR ShaHash & PerceptualHash
+		/// Command6 - FindDupsUsingHash
+		/// </summary>
+		/// <param name="hash"></param>
+		/// <param name="verbose"></param>
 		public static void FindDupsUsingHash(string hash, bool verbose)
 		{
 			Serilog.Log.Information($"FindDupsUsingHash - Starting\n\thash: {hash}\n\tverbose: {verbose}\n");
@@ -793,39 +830,136 @@ namespace DupesMaint2
 		}
 
 
-
-
-		// LoadFileType the duplicate rows in the CheckSum table and report files to delete or report AND delete.
-		public static void DeleteDupes(bool delete)
+		/// <summary>
+		/// Move files from Pictures/CameraRoll folder to the correct date based folder under Photos root folder.
+		/// Assumes that the CheckSum table has been loaded with the Pictures/CameraRoll folder.
+		/// Command4
+		/// </summary>
+		/// <param name="MediaFileType">Either 'Photo' or 'Video' </param>
+		/// <param name="verbose">Verbose logging</param>
+		public static void CameraRoll_Move(string mediaFileType, bool verbose)
 		{
-			throw new NotImplementedException();
+			Serilog.Log.Information($"FindDupsUsingHash - Starting\n\tmediaFileType: {mediaFileType}\n\tverbose: {verbose}\n");
+			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-			//System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
+			PopsDbContext popsDbContext = new();
+			int processedCount=0, dropCount = 0;
 
-			//// 1. Make sure there are some duplicate rows in the CheckSum table
-			//const string sql = @"select SHA,Count(*) as DupeCount from CheckSum group by SHA having Count(*)>1";
+			// Get all the CheckSum rows where the folder is C:\Users\User\OneDrive\Pictures\Camera Roll and the MediaFileType = parameter
+			List<CheckSum> checkSum = popsDbContext.CheckSums.Where(a => a.Folder == @"C:\Users\User\OneDrive\Pictures\Camera Roll" && a.MediaFileType == mediaFileType)
+										.ToList();
+            if (checkSum.Count == 0)
+            {
+                Serilog.Log.Warning($"CameraRoll_Move - Abort. No rows found for MediaFileType: {mediaFileType}\n{new String('-', 150)}\n");
+                return;
+            }
+			Serilog.Log.Information($"CameraRoll_Move - {checkSum.Count:N0} rows found.");
 
-			//Serilog.Log.Information($"DeleteDupes - Starting DeleteDupes: --delete: {delete} sql: {sql}");
+            switch (mediaFileType)
+            {
+				case "Photo":
+					Photos_Process();
+				break;
+				case "Video":
+					throw new NotImplementedException("Videos not yet implemented");
+				default:
+					break;
+			}
 
-			//using var cnn = new SqlConnection(ConnectionString);
-			//var _CheckSumHasDuplicates = cnn.Query<CheckSumHasDuplicates>(sql).AsList();
+            _stopwatch.Stop();
+			Serilog.Log.Information($"CameraRoll_Move- processedCount: {processedCount}, dropCount: {dropCount}");
+			Serilog.Log.Information($"CameraRoll_Move- Total execution time: {_stopwatch.Elapsed.Minutes} mins.{new String('-', 150)}\n");
 
-			//if (_CheckSumHasDuplicates.Count == 0)
-			//{
-			//	Serilog.Log.Error("DeleteDupes - Abort. No duplicates found in CheckSum{new String('-', 150)}\n");
-			//	return;
-			//}
-			//Serilog.Log.Information($"DeleteDupes - {_CheckSumHasDuplicates.Count} duplicates found in the CheckSum table.");
+            ///////////////////
+            //// local methods
+            ///////////////////
+            void Photos_Process()
+			{
+				string _sCreateDateTime;
+				bool update;
 
-			//// Main processing foreach loop local function
-			//ProcessDeleteDupes();
+				foreach (var row in checkSum)
+                {
+					update = true;
 
-			//_stopwatch.Stop();
-			//Serilog.Log.Information($"INFO\t- Total execution time: {_stopwatch.Elapsed.Minutes} mins.{new String('-', 150)}\n");
+					// get the EXIF date					
+					_sCreateDateTime = CreateDate_Extract(row.FileFullName);
+                    if (string.IsNullOrEmpty(_sCreateDateTime))
+                    {
+						Serilog.Log.Warning($"CameraRoll_Move - No EXIF date for {row.FileFullName}");
+						dropCount++;
+						continue;
+					}
+                    if (!DateTime.TryParse(_sCreateDateTime, out DateTime createDateTime))
+                    {
+                        Serilog.Log.Warning($"CameraRoll_Move - _sCreateDateTime: {_sCreateDateTime} - not valid date.");
+						dropCount++;
+						continue;
+                    }
 
-			///////////////////
-			//// local function
-			///////////////////
+                    // format the target folder
+                    string targetFile = Path.Combine(@"C:\Users\User\OneDrive\Photos", 
+						createDateTime.Year.ToString(), 
+						createDateTime.Month.ToString("00"),
+						row.TheFileName);
+
+					FileInfo fileInfo = new(row.FileFullName);
+                    try
+                    {
+						fileInfo.MoveTo(targetFile);
+						update = false;
+                    }
+					catch (IOException ioEXC)
+                    {
+						Serilog.Log.Warning($"CameraRoll_Move - IO exception moving file: {row.FileFullName} to {targetFile}\n{ioEXC}");
+						update = false;
+					}
+					catch (Exception)
+                    {
+                        throw;
+                    }
+
+                    if (verbose)
+                    {
+						Serilog.Log.Information($"CameraRoll_Move - file: {row.FileFullName} was moved to {targetFile}");
+					}
+
+					// if the file was successfully moved then update the CheckSum row folder column
+                    if (update)
+                    {
+						row.Folder = Path.Combine(@"C:\Users\User\OneDrive\Photos",
+													createDateTime.Year.ToString(),
+													createDateTime.Month.ToString("00"));
+
+						processedCount++;
+					}
+                    else
+                    {
+						dropCount++;
+                    }
+				}
+				popsDbContext.SaveChanges();
+			}
+
+			string CreateDate_Extract(string fileFullName)
+			{
+				var directories = GetMetadata(fileFullName);
+				var _ExifSubIfdDirectory = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
+
+				if (_ExifSubIfdDirectory is not null)
+				{
+					string _sCreateDateTime = _ExifSubIfdDirectory?.GetDescription(ExifSubIfdDirectory.TagDateTimeOriginal);
+					if (!string.IsNullOrEmpty(_sCreateDateTime) && !_sCreateDateTime.Equals("0000:00:00 00:00:00"))
+					{
+						if (_sCreateDateTime[0..10].IndexOf(':') > -1)
+						{
+							return _sCreateDateTime[0..10].Replace(':', '-') + _sCreateDateTime[10..];
+						}
+					}
+				}
+				return string.Empty;
+			}
+
 			//void ProcessDeleteDupes()
 			//{
 			//	foreach (var aCheckSumHasDuplicates in _CheckSumHasDuplicates)
@@ -1005,12 +1139,84 @@ namespace DupesMaint2
 		}
 
 
-/*		static void BuildConfig(IConfigurationBuilder builder)
+		public static DirectoryList GetMetadata(string filePath)
 		{
-			builder.SetBasePath(System.IO.Directory.GetCurrentDirectory())
-				.AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-				.AddJsonFile($"appsettings.{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") ?? "Production"}.json", optional: true);
+			var directories = new List<MetadataExtractor.Directory>();
+
+            using (var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+            {
+                directories.AddRange(ReadMetadata(stream));
+            }
+
+            directories.Add(new FileMetadataReader().Read(filePath));
+
+			return directories;
 		}
-*/
+
+
+		/// <summary>Reads metadata from an <see cref="Stream"/>.</summary>
+		/// <param name="stream">A stream from which the file data may be read.  The stream must be positioned at the beginning of the file's data.</param>
+		/// <returns>A list of <see cref="Directory"/> instances containing the various types of metadata found within the file's data.</returns>
+		/// <exception cref="ImageProcessingException">The file type is unknown, or processing errors occurred.</exception>
+		/// <exception cref="Exception"/>
+		public static DirectoryList ReadMetadata(Stream stream)
+		{
+			// get the media file type from the file
+			var fileType = FileTypeDetector.DetectFileType(stream);
+
+			var directories = new List<MetadataExtractor.Directory>();
+
+#pragma warning disable format
+
+			try 
+			{					
+				directories.AddRange(fileType switch
+				{
+					FileType.Arw       => TiffMetadataReader.ReadMetadata(stream),
+					FileType.Avi       => AviMetadataReader.ReadMetadata(stream),
+					FileType.Bmp       => BmpMetadataReader.ReadMetadata(stream),
+					FileType.Crx       => QuickTimeMetadataReader.ReadMetadata(stream),
+					FileType.Cr2       => TiffMetadataReader.ReadMetadata(stream),
+					FileType.Eps       => EpsMetadataReader.ReadMetadata(stream),
+					FileType.Gif       => GifMetadataReader.ReadMetadata(stream),
+					FileType.Ico       => IcoMetadataReader.ReadMetadata(stream),
+					FileType.Jpeg      => JpegMetadataReader.ReadMetadata(stream),
+					FileType.Mp3       => Mp3MetadataReader.ReadMetadata(stream),
+					FileType.Nef       => TiffMetadataReader.ReadMetadata(stream),
+					FileType.Netpbm    => new MetadataExtractor.Directory[] { NetpbmMetadataReader.ReadMetadata(stream) },
+					FileType.Orf       => TiffMetadataReader.ReadMetadata(stream),
+					FileType.Pcx       => new MetadataExtractor.Directory[] { PcxMetadataReader.ReadMetadata(stream) },
+					FileType.Png       => PngMetadataReader.ReadMetadata(stream),
+					FileType.Psd       => PsdMetadataReader.ReadMetadata(stream),
+					FileType.QuickTime => QuickTimeMetadataReader.ReadMetadata(stream),
+					FileType.Mp4       => QuickTimeMetadataReader.ReadMetadata(stream),
+					FileType.Raf       => RafMetadataReader.ReadMetadata(stream),
+					FileType.Rw2       => TiffMetadataReader.ReadMetadata(stream),
+					FileType.Tga       => TgaMetadataReader.ReadMetadata(stream),
+					FileType.Tiff      => TiffMetadataReader.ReadMetadata(stream),
+					FileType.Wav       => WavMetadataReader.ReadMetadata(stream),
+					FileType.WebP      => WebPMetadataReader.ReadMetadata(stream),
+					FileType.Heif      => HeifMetadataReader.ReadMetadata(stream),
+
+					FileType.Unknown   => throw new ImageProcessingException("File format could not be determined"),
+					_                  => Enumerable.Empty<MetadataExtractor.Directory>()
+				});
+		
+			}
+			catch (MetadataExtractor.ImageProcessingException ipx)
+            {
+				Serilog.Log.Error($"ReadMetadata - {ipx}");
+            }
+			catch (Exception exc)
+			{
+				Serilog.Log.Error($"ReadMetadata - {exc}");
+			}
+
+#pragma warning restore format
+
+            directories.Add(new FileTypeDirectory(fileType));
+
+			return directories;
+		}
 	}
 }
