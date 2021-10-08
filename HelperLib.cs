@@ -832,20 +832,20 @@ namespace DupesMaint2
 
 		/// <summary>
 		/// Move files from Pictures/CameraRoll folder to the correct date based folder under Photos root folder.
-		/// Assumes that the CheckSum table has been loaded with the Pictures/CameraRoll folder.
+		/// Assumes that the CheckSum table has been loaded with the 'C:\Users\User\OneDrive\Pictures\Camera Roll' folder.
 		/// Command4
 		/// </summary>
 		/// <param name="MediaFileType">Either 'Photo' or 'Video' </param>
 		/// <param name="verbose">Verbose logging</param>
 		public static void CameraRoll_Move(string mediaFileType, bool verbose)
 		{
-			Serilog.Log.Information($"FindDupsUsingHash - Starting\n\tmediaFileType: {mediaFileType}\n\tverbose: {verbose}\n");
+			Serilog.Log.Information($"CameraRoll_Move - Starting\n\tmediaFileType: {mediaFileType}\n\tverbose: {verbose}\n");
 			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
 			PopsDbContext popsDbContext = new();
 			int processedCount=0, dropCount = 0;
 
-			// Get all the CheckSum rows where the folder is C:\Users\User\OneDrive\Pictures\Camera Roll and the MediaFileType = parameter
+			// Get all the CheckSum rows where the folder is 'C:\Users\User\OneDrive\Pictures\Camera Roll' and the MediaFileType = parameter
 			List<CheckSum> checkSum = popsDbContext.CheckSums.Where(a => a.Folder == @"C:\Users\User\OneDrive\Pictures\Camera Roll" && a.MediaFileType == mediaFileType)
 										.ToList();
             if (checkSum.Count == 0)
@@ -867,8 +867,8 @@ namespace DupesMaint2
 			}
 
             _stopwatch.Stop();
-			Serilog.Log.Information($"CameraRoll_Move- processedCount: {processedCount}, dropCount: {dropCount}");
-			Serilog.Log.Information($"CameraRoll_Move- Total execution time: {_stopwatch.Elapsed.Minutes} mins.{new String('-', 150)}\n");
+			Serilog.Log.Information($"CameraRoll_Move- processedCount: {processedCount:N0}, dropCount: {dropCount:N0}");
+			Serilog.Log.Information($"CameraRoll_Move- Total execution time: {_stopwatch.Elapsed.TotalSeconds} secs.\n{new String('-', 150)}\n");
 
             ///////////////////
             //// local methods
@@ -876,23 +876,20 @@ namespace DupesMaint2
             void Photos_Process()
 			{
 				string _sCreateDateTime;
-				bool update;
 
 				foreach (var row in checkSum)
                 {
-					update = true;
-
 					// get the EXIF date					
 					_sCreateDateTime = CreateDate_Extract(row.FileFullName);
                     if (string.IsNullOrEmpty(_sCreateDateTime))
                     {
-						Serilog.Log.Warning($"CameraRoll_Move - No EXIF date for {row.FileFullName}");
+						Serilog.Log.Warning($"CameraRoll_Move - No EXIF date for {row.Id}, {row.FileFullName}");
 						dropCount++;
 						continue;
 					}
                     if (!DateTime.TryParse(_sCreateDateTime, out DateTime createDateTime))
                     {
-                        Serilog.Log.Warning($"CameraRoll_Move - _sCreateDateTime: {_sCreateDateTime} - not valid date.");
+                        Serilog.Log.Warning($"CameraRoll_Move - _sCreateDateTime: {_sCreateDateTime} - not valid date, row: {row.Id}");
 						dropCount++;
 						continue;
                     }
@@ -904,43 +901,37 @@ namespace DupesMaint2
 						row.TheFileName);
 
 					FileInfo fileInfo = new(row.FileFullName);
-                    try
-                    {
+
+					try
+					{
 						fileInfo.MoveTo(targetFile);
-						update = false;
-                    }
-					catch (IOException ioEXC)
-                    {
-						Serilog.Log.Warning($"CameraRoll_Move - IO exception moving file: {row.FileFullName} to {targetFile}\n{ioEXC}");
-						update = false;
-					}
-					catch (Exception)
-                    {
-                        throw;
-                    }
 
-                    if (verbose)
-                    {
-						Serilog.Log.Information($"CameraRoll_Move - file: {row.FileFullName} was moved to {targetFile}");
-					}
-
-					// if the file was successfully moved then update the CheckSum row folder column
-                    if (update)
-                    {
+						// if the file was successfully moved then update the CheckSum row Folder column
 						row.Folder = Path.Combine(@"C:\Users\User\OneDrive\Photos",
 													createDateTime.Year.ToString(),
 													createDateTime.Month.ToString("00"));
-
 						processedCount++;
+
+						if (verbose)
+						{
+							Serilog.Log.Information($"CameraRoll_Move - file: {row.FileFullName} was moved to {targetFile}");
+						}
 					}
-                    else
+					catch (IOException ioEXC)
                     {
 						dropCount++;
+						Serilog.Log.Error($"CameraRoll_Move - IO exception moving file id: {row.Id}, {row.FileFullName}\nto {targetFile}\n{ioEXC}\n");
+					}
+					catch (Exception exc)
+                    {
+						Serilog.Log.Error($"CameraRoll_Move - Exception moving file id: {row.Id}, {row.FileFullName}\nto {targetFile}\n{exc}\n");
+						throw;
                     }
 				}
 				popsDbContext.SaveChanges();
 			}
 
+			// get the EXIF TagDateTimeOriginal date from the photo's EXIF data
 			string CreateDate_Extract(string fileFullName)
 			{
 				var directories = GetMetadata(fileFullName);
@@ -959,44 +950,6 @@ namespace DupesMaint2
 				}
 				return string.Empty;
 			}
-
-			//void ProcessDeleteDupes()
-			//{
-			//	foreach (var aCheckSumHasDuplicates in _CheckSumHasDuplicates)
-			//	{
-			//		using var cnn = new SqlConnection(ConnectionString);
-			//		var _CheckSum = cnn.Query<CheckSum>($"select * from CheckSum where SHA='{aCheckSumHasDuplicates.SHA}' order by LEN(TheFileName) desc").AsList();
-			//		if (_CheckSum.Count < 2)
-			//		{
-			//			Serilog.Log.Error($"ProcessDeleteDupes - Only found {_CheckSum.Count} CheckSum rows with SHA: {aCheckSumHasDuplicates.SHA}, should be >= 2.");
-			//			continue;
-			//		}
-
-			//		Serilog.Log.Information($"ProcessDeleteDupes - {_CheckSum.Count} CheckSum rows for duplicate SHA: {aCheckSumHasDuplicates.SHA}");
-
-			//		// get the CheckSum row with the longest name NB could be the same
-			//		var aCheckSum = _CheckSum[0];
-			//		if (delete)
-			//		{
-			//			FileInfo deleteFileInfo = new FileInfo(Path.Combine(aCheckSum.Folder, aCheckSum.TheFileName));
-			//			if (deleteFileInfo.Exists)
-			//			{
-			//				deleteFileInfo.Delete();
-			//				using IDbConnection db = new SqlConnection(ConnectionString);
-			//				db.Execute($"delete from dbo.CheckSum where Id={aCheckSum.Id}");
-			//				Serilog.Log.Warning($"ProcessDeleteDupes - Deleted the SHA with the longest duplicate name was id: {aCheckSum.Id}\tThe name was: {aCheckSum.TheFileName}\tThe folder was: {aCheckSum.Folder}");
-			//			}
-			//			else
-			//			{
-			//				Serilog.Log.Error($"ProcessDeleteDupes - The duplicate to delete {aCheckSum.TheFileName}\tdoes not now exits in folder: {aCheckSum.Folder}");
-			//			}
-			//		}
-			//		else
-			//		{
-			//			Serilog.Log.Information($"ProcessDeleteDupes - No delete. The SHA with the longest duplicate name is id: {aCheckSum.Id}\tThe name is: {aCheckSum.TheFileName}\tThe folder is: {aCheckSum.Folder}");
-			//		}
-			//	}
-			//}
 		}
 
 
