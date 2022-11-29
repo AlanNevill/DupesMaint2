@@ -78,7 +78,7 @@ namespace DupesMaint2
 			Serilog.Log.Information(new String('=', 60));
 		}
 
-		// map for file extensions to media group
+		// map file extensions to media group
 		static readonly List<FileExtensionTypes> _fileExtensionTypes = new()
 		{
 			new FileExtensionTypes { Type = ".3GP", Group = "Video" },
@@ -105,7 +105,7 @@ namespace DupesMaint2
 			new FileExtensionTypes { Type = ".WEBP", Group = "Photo" },
 		};
 
-		// list of file extensions that can be hashed by the library
+		// list of file extensions that can be hashed by the metadata extractor library
 		static readonly List<FileExtensionTypes> _fileExtensionTypes2Hashing = new()
 		{
 			new FileExtensionTypes { Type = ".BMP", Group = "Photo" },
@@ -130,7 +130,7 @@ namespace DupesMaint2
 		/// </summary>
 		/// <param name="folder">DirectoryInfo - root folder to the folder structure.</param>
 		/// <param name="fileType">string - Either 'Photo' or 'Video'.</param>
-		/// <param name="replace">Bool - If true truncate table CheckSum else add rows.</param>
+		/// <param name="replace">Bool - If true truncate table CheckSum else just add rows.</param>
 		/// <param name="verbose">Bool - If true then verbose logging.</param>
 		public static void LoadFileType(DirectoryInfo folder, string fileType, bool replace, bool verbose)
 		{
@@ -647,27 +647,23 @@ namespace DupesMaint2
 			//////////////////////////////
 			/// Local methods
 			//////////////////////////////
-			object ShaHash()
-			{
-				return	from c in popsDbContext.CheckSums
-						where c.Sha != null
-						group c by c.Sha
-						into g
-						where g.Count() > 1
-						//orderby g.Count() descending
-						select new { hashVal = g.Key, Count = g.Count() };
-			}
+			object ShaHash() => 
+					from c in popsDbContext.CheckSums
+					where c.Sha != null
+					group c by c.Sha
+					into g
+					where g.Count() > 1
+					//orderby g.Count() descending
+					select new { hashVal = g.Key, Count = g.Count() };
 
-			object PerCeptualHash()
-            {
-				return	from c in popsDbContext.CheckSums
-						where c.PerceptualHash != null
-						group c by c.PerceptualHash
-						into g
-						where g.Count() > 1
-						//orderby g.Count() descending
-						select new { hashVal = g.Key, Count = g.Count() };
-			}
+			object PerCeptualHash() =>
+					from c in popsDbContext.CheckSums
+					where c.PerceptualHash != null
+					group c by c.PerceptualHash
+					into g
+					where g.Count() > 1
+					//orderby g.Count() descending
+					select new { hashVal = g.Key, Count = g.Count() };
 		}
 
         private static void CheckSumDup_upsert(DupOnHash dupOnHash, bool verbose, ref int insertCheckSumDupsCount, ref int updateCheckSumDupsBasedOnCount, ref int insertCheckSumDupsBasedOnCount)
@@ -835,7 +831,7 @@ namespace DupesMaint2
 		/// Assumes that the CheckSum table has been loaded with the 'C:\Users\User\OneDrive\Pictures\Camera Roll' folder.
 		/// Command4
 		/// </summary>
-		/// <param name="MediaFileType">Either 'Photo' or 'Video' </param>
+		/// <param name="mediaFileType">Either 'Photo' or 'Video' </param>
 		/// <param name="verbose">Verbose logging</param>
 		public static void CameraRoll_Move(string mediaFileType, bool verbose)
 		{

@@ -1,7 +1,7 @@
 # DupesMaint2
 
-
 ## CLI application - Similar to Find Duplicates
+
 Finds duplicate files from database tables in Pops database, but only for the specified folder. 
 
 ### Root command `DupesMaintConsole`
@@ -33,9 +33,7 @@ Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
 
 `./DupesMaint2 --folder "C:\\Users\\User\\OneDrive\\Photos" --replace false`
 
-
-
-## Subcommand ProcessEXIF
+## Subcommand - ProcessEXIF
 
 Command to extract EXIF date/time from all JPG image files in a folder tree. Optionally update the columns in the POPS.CheckSum table.
 
@@ -59,13 +57,12 @@ Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
 
 `./DupesMaint2 ProcessExif --folder "C:\\Users\\User\\OneDrive\\Photos" --replace false`
 
-
-
-## Subcommand3 anExif
+## Subcommand3 - anExif
 
 Extracts all EXIF data from a JPG image to the console and log.
 
 ### --image
+
 The image path. Must exist.
 
 ### Usage
@@ -74,47 +71,47 @@ Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
 
 `./DupesMaint2 anExif --image "C:\\Users\\User\\OneDrive\\Photos\\2013\\02\\2013-02-24 12.34.54-3.jpg"`
 
+## Subcommand4 - CameraRoll_Move
 
+Move media files from folder "C:\Users\User\OneDrive\Pictures\Camera Roll" to Photos\YYYY\MM or Video\YYYY-MM folders for appropriate year and month. Reads EXIF data from Photos.
 
-## Subcommand4 deleteDups
+### --mediaFileType
 
-Process the duplicate rows in the POPS.CheckSum table and report files to delete or report AND delete.
+Photo or Video. Video not yet implemented
 
-### --delete true/<u>false</u>
+### --verbose true/<u>false</u>
 
-Set to true if the duplicate files should be deleted.
+Toggle verbose logging.
 
 ### Usage
 
 Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
 
-`./DupesMaint2 deleteDups`
+`./DupesMaint2 CameraRoll_Move --mediaFileType Photo --verbose true`
 
-`./DupesMaint2 deleteDups --delete true`
+`./DupesMaint2 CameraRoll_Move --mediaFileType Photo`
 
+## Subcommand5 - CalculateHashes
 
+Calculate and store up to 4 hashes in the CheckSum table for photos only.
 
-## Subcommand5  CalculateHashes
-
-Calculate and store up to 4 hashes in the CheckSum table.
-
-### --ShaHash				true/<u>false</u>
+### --ShaHash                true/<u>false</u>
 
 Claculate the SHA 256 value for the column.
 
-### --averageHash		true/<u>false</u>
+### --averageHash        true/<u>false</u>
 
 Calculate the AverageHash column.
 
-### --differenceHash	true/<u>false</u>
+### --differenceHash    true/<u>false</u>
 
 Calculate the DifferenceHash column.
 
-### --perceptualHash	true/<u>false</u>
+### --perceptualHash    true/<u>false</u>
 
 Calculate the PerceptualHash column.
 
-### --verbose					true/<u>false</u>
+### --verbose                    true/<u>false</u>
 
 Verbose logging.
 
@@ -126,17 +123,15 @@ Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
 
 `./DupesMaint2 CalculateHashes --averageHash true`
 
-
-
-## Subcommand6 FindDupsUsingHash
+## Subcommand6 - FindDupsUsingHash DEPRECATED
 
 CheckSumDups insert or update based on hash column from CheckSum table.
 
-### --hash	 FromAmong("average","difference","perceptual")
+### --hash     FromAmong("average","difference","perceptual")
 
 Select which hash column to use.
 
-### --verbose	true/<u>false</u>
+### --verbose    true/<u>false</u>
 
 Verbose logging.
 
@@ -146,17 +141,9 @@ Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
 
 `./dupesmaint2 FindDupsUsingHash --hash average`
 
-
-
 ### Log file
 
-Writes to a log file in \Logs folder.
-
-
-
-
-
-
+Writes to a log file by date in \Logs folder.
 
 ## Process
 
@@ -164,8 +151,3 @@ Writes to a log file in \Logs folder.
 2. 
 3. 
 4. 
-
-
-
-
-
