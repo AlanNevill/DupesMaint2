@@ -1,8 +1,8 @@
-# DupesMaint2
+.# DupesMaint2
 
 ## CLI application - Similar to Find Duplicates
 
-Finds duplicate files from database tables in Pops database, but only for the specified folder. 
+Finds duplicate files from database tables in Photos database, but only for the specified folder. 
 
 ### Root command `DupesMaintConsole`
 

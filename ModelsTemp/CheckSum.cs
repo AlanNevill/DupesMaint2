@@ -1,11 +1,12 @@
-﻿using Microsoft.EntityFrameworkCore;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using Microsoft.EntityFrameworkCore;
 
-namespace DupesMaint2.Models;
+namespace DupesMaint2.ModelsTemp;
 
+[Table("CheckSum")]
 public partial class CheckSum
 {
     [Key]

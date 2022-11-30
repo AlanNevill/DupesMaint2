@@ -22,7 +22,8 @@ namespace DupesMaint2.Models
         {
         }
 
-        public virtual DbSet<CheckSum> CheckSums { get; set; }
+        public virtual DbSet<CheckSum> CheckSum { get; set; }
+
         public virtual DbSet<CheckSumDups> CheckSumDups { get; set; }
 
         public virtual DbSet<DupOnHash> DupOnHash { get; set; }
@@ -38,7 +39,7 @@ namespace DupesMaint2.Models
 
             if (!optionsBuilder.IsConfigured)
             {
-                optionsBuilder.UseSqlServer(HelperLib.ConnectionString);
+                optionsBuilder.UseSqlServer(Program._cnStr);
             }
         }
 
@@ -48,67 +49,12 @@ namespace DupesMaint2.Models
 
             modelBuilder.Entity<CheckSum>(entity =>
             {
-                entity.ToTable("CheckSum");
+                entity.HasKey(e => e.Id).HasName("PK_ID");
 
-                entity.Property(e => e.FileCreateDt)
-                    .HasColumnType("smalldatetime")
-                    .HasDefaultValueSql("('1900-01-01')");
-
-                entity.Property(e => e.FileExt)
-                    .IsRequired()
-                    .HasMaxLength(10)
-                    .IsUnicode(false);
-
-                entity.Property(e => e.FileFullName)
-                    .IsRequired()
-                    .HasMaxLength(401)
-                    .IsUnicode(false)
-                    .HasComputedColumnSql("(([Folder]+'\\')+[TheFileName])", false);
-
-                entity.Property(e => e.Folder)
-                    .IsRequired()
-                    .HasMaxLength(200)
-                    .IsUnicode(false);
-
-                entity.Property(e => e.MediaFileType)
-                    .HasMaxLength(10)
-                    .IsUnicode(false);
-
-                entity.Property(e => e.Mp4duration).HasColumnName("MP4Duration");
-
-                entity.Property(e => e.Notes)
-                    .HasMaxLength(1000)
-                    .IsUnicode(false);
-
-                entity.Property(e => e.Notes2)
-                    .HasMaxLength(1000)
-                    .IsUnicode(false);
-
-                entity.Property(e => e.AverageHash).HasColumnType("decimal(20, 0)");
-                entity.Property(e => e.DifferenceHash).HasColumnType("decimal(20, 0)");
-                entity.Property(e => e.PerceptualHash).HasColumnType("decimal(20, 0)");
-
-                entity.Property(e => e.SCreateDateTime)
-                    .HasMaxLength(30)
-                    .IsUnicode(false);
-
-                entity.Property(e => e.Sha)
-                    .HasMaxLength(200)
-                    .IsUnicode(false)
-                    .HasColumnName("SHA");
-
-                entity.Property(e => e.FormatValid)
-                    .IsRequired()
-                    .HasDefaultValueSql("Y")
-                    .HasMaxLength(1)
-                    .IsUnicode(false);
-
-                entity.Property(e => e.TheFileName)
-                    .IsRequired()
-                    .HasMaxLength(200)
-                    .IsUnicode(false);
-
-                entity.HasKey(e => e.Id);
+                entity.Property(e => e.CreateMonth).HasComputedColumnSql("(datepart(month,[CreateDateTime]))", false);
+                entity.Property(e => e.CreateYear).HasComputedColumnSql("(datepart(year,[CreateDateTime]))", false);
+                entity.Property(e => e.FileFullName).HasComputedColumnSql("(([Folder]+'\\')+[TheFileName])", false);
+                entity.Property(e => e.FormatValid).IsFixedLength();
             });
 
             modelBuilder.Entity<CheckSumDups>(entity =>

@@ -2,7 +2,7 @@
   "profiles": {
     "DupesMaint2": {
       "commandName": "Project",
-      "commandLineArgs": "deleteDups --delete true"
+      "commandLineArgs": "CalculateHashes --ShaHash true"
     }
   }
 }
