@@ -72,4 +72,7 @@ public partial class CheckSum
     public int? CreateYear { get; set; }
 
     public int? CreateMonth { get; set; }
+
+    [InverseProperty("Checksum")]
+    public virtual CheckSumDups? CheckSumDups { get; set; }
 }

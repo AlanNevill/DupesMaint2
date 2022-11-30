@@ -1,18 +1,23 @@
-﻿using System.ComponentModel.DataAnnotations.Schema;
+﻿using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
-namespace DupesMaint2.Models
+namespace DupesMaint2.Models;
+
+[PrimaryKey("CheckSumId", "DupBasedOn")]
+public partial class CheckSumDupsBasedOn
 {
-#nullable disable
+    [Key]
+    public int CheckSumId { get; set; }
 
-    public partial class CheckSumDupsBasedOn
-    {
-        public int CheckSumId { get; set; }
-        public string DupBasedOn { get; set; }
-        public string BasedOnVal { get; set; }
+    [Key]
+    [StringLength(20)]
+    [Unicode(false)]
+    public string DupBasedOn { get; set; } = null!;
 
-        // navigation properties
-        //public int CheckSumDupsCheckSumId { get; set; }
+    [StringLength(200)]
+    [Unicode(false)]
+    public string BasedOnVal { get; set; } = null!;
 
-        public CheckSumDups CheckSumDups { get; set; }
-    }
+    public virtual CheckSumDups CheckSum { get; set; } = null!;
 }

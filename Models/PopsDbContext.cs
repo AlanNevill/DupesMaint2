@@ -1,17 +1,11 @@
 ﻿using System;
+using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Console;
-
-#nullable disable
 
 namespace DupesMaint2.Models
 {
     public partial class PopsDbContext : DbContext
     {
-        // TODO: static LoggerFactory object for logging SQL commands to the console
-        public static readonly ILoggerFactory MyLoggerFactory = LoggerFactory.Create(builder => { builder.AddConsole(); });
 
         public PopsDbContext()
         {
@@ -59,37 +53,19 @@ namespace DupesMaint2.Models
 
             modelBuilder.Entity<CheckSumDups>(entity =>
             {
-                entity.ToTable("CheckSumDups");
-
-                entity.HasKey(e => e.Id);
-
-                entity.Property(e => e.Id)
-                    .IsRequired();
-
-                entity.Property(e => e.CheckSumId)
-                    .IsRequired();
+                entity.HasKey(e => e.Id).HasName("PK_CheckSumDups_ID");
 
                 entity.Property(e => e.ToDelete)
-                    .IsRequired()
-                    .HasMaxLength(1)
-                    .IsUnicode(false)
                     .HasDefaultValueSql("('N')")
-                    .IsFixedLength(true);
+                    .IsFixedLength();
+
+                entity.HasOne(d => d.Checksum).WithOne(p => p.CheckSumDups).HasConstraintName("fk_CheckSumDups_CheckSum");
             });
 
             modelBuilder.Entity<CheckSumDupsBasedOn>(entity =>
             {
-                entity.ToTable("CheckSumDupsBasedOn");
-
-                entity.HasKey(e => new { e.CheckSumId, e.DupBasedOn});
-
-                entity.Property(e => e.DupBasedOn)
-                    .HasMaxLength(20)
-                    .IsUnicode(false);
-
-                entity.Property(e => e.BasedOnVal)
-                    .HasMaxLength(200)
-                    .IsUnicode(false);
+                entity.HasOne(d => d.CheckSum).WithMany(p => p.CheckSumDupsBasedOn)
+                    .HasPrincipalKey(p => p.ChecksumId);
             });
 
 

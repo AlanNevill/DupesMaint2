@@ -96,7 +96,7 @@ internal class Program
 		#region "subcommand6 CheckSumDups - insert or update CheckSumDups based on hash from CheckSum"
 		Command command6 = new ("FindDupsUsingHash", "CheckSumDups - insert or update CheckSumDups based on hash from CheckSum.")
 		{
-			new Option<string>("--hash", "Hash to use average, difference, perceptual.").FromAmong("ShaHash", "AverageHash", "DifferenceHash", "PerceptualHash"),
+			new Option<string>("--hash", "Hash to use SHA, average, difference, perceptual.").FromAmong("Sha", "Average", "Difference", "Perceptual"),
 			new Option<bool>("--verbose", getDefaultValue: () => false, "Verbose logging.")
 		};
 		command6.Handler = CommandHandler.Create((string hash, bool verbose) => { HelperLib.FindDupsUsingHash(hash, verbose); });

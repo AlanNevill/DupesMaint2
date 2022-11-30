@@ -1,20 +1,26 @@
-﻿using System;
+﻿using DupesMaint2.ModelsTemp;
+using Microsoft.EntityFrameworkCore;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-#nullable disable
-
 namespace DupesMaint2.Models;
-
+[Index("ChecksumId", Name = "IX_CheckSumDups_CheckSumId", IsUnique = true)]
 public partial class CheckSumDups
 {
     [Key]
-    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     public int Id { get; set; }
-    public int CheckSumId { get; set; }
-    public string ToDelete { get; set; } = "N";
 
-    // Navigation property
-    public List<CheckSumDupsBasedOn>? CheckSumDupsBasedOnRows { get; set; } = new List<CheckSumDupsBasedOn>();
+    public int ChecksumId { get; set; }
+
+    [StringLength(1)]
+    [Unicode(false)]
+    public string ToDelete { get; set; } = null!;
+
+    public virtual ICollection<CheckSumDupsBasedOn> CheckSumDupsBasedOn { get; } = new List<CheckSumDupsBasedOn>();
+
+    [ForeignKey("ChecksumId")]
+    [InverseProperty("CheckSumDups")]
+    public virtual CheckSum Checksum { get; set; } = null!;
 }

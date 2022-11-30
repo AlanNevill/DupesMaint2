@@ -477,7 +477,12 @@ namespace DupesMaint2
 		/// <param name="verbose"></param>
 		public static void FindDupsUsingHash(string hash, bool verbose)
 		{
-			Serilog.Log.Information($"FindDupsUsingHash - Starting\n\thash: {hash}\n\tverbose: {verbose}\n");
+			Log.Information($"""
+			FindDupsUsingHash - Starting
+				hash:		{hash}
+				verbose:	{verbose}
+			""");
+
 			System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
 			PopsDbContext popsDbContext = new ();
@@ -487,14 +492,14 @@ namespace DupesMaint2
             // get a collection of HashValues and count of each from CheckSum table where the count based on the hash column > 1 i.e. duplicates based on that hash type
             switch (hash)
             {
-				case "ShaHash":
+				case "Sha":
 					anonymousHash = ShaHash();
 					break;
-				case "PerceptualHash":
+				case "Perceptual":
 					anonymousHash = PerCeptualHash();
 					break;
                 default:
-					Serilog.Log.Error($"FindDupsUsingHash - Hash: {hash} not implemented, exiting.");
+					Log.Error($"FindDupsUsingHash - Hash: {hash} not implemented, exiting.");
 					return;
             }
 
@@ -504,41 +509,33 @@ namespace DupesMaint2
 			{
 				anonymousCount += checkSumWithDup.Count;
 			}
-			Serilog.Log.Information($"FindDupsUsingHash - anonymousCount: {anonymousCount:N0}");
+			Log.Information($"FindDupsUsingHash - anonymousCount: {anonymousCount:N0}");
 
 
 			foreach (var checkSumWithDup in (dynamic)anonymousHash)
             {
                 if (verbose)
-                {
-					Serilog.Log.Information($"FindDupsUsingHash - checkSumWithDup.hashVal: {checkSumWithDup.hashVal}, {checkSumWithDup.Count}");
-				}
+					Log.Information($"FindDupsUsingHash - checkSumWithDup.hashVal: {checkSumWithDup.hashVal}, {checkSumWithDup.Count}");
 
 				// get a collection of CheckSum.Ids from the rows with this hash value
 				dynamic checkSums4Dup;
 				switch (hash)
 				{
-					case "ShaHash":
+					case "Sha":
 						string shaHashVal = checkSumWithDup.hashVal;
 						checkSums4Dup = from c in popsDbContext.CheckSum where c.Sha == shaHashVal select new { c.Id };
 						break;
-					case "PerceptualHash":
+					case "Perceptual":
 						decimal? hashVal = checkSumWithDup.hashVal;
 						checkSums4Dup = from c in popsDbContext.CheckSum where c.PerceptualHash == hashVal select new { c.Id };
 						break;
 					default:
-						Serilog.Log.Error($"FindDupsUsingHash - Hash: {hash} not implemented, exiting.");
+						Log.Error($"FindDupsUsingHash - Hash: {hash} not implemented, exiting.");
 						return;
 				}
 
 
-				// check that the count is correct
-    //            if (checkSums4Dup.LongCount() != checkSumWithDup.Count)
-    //            {
-				//	Serilog.Log.Warning($"FindDupsUsingHash - checkSum4Dup.LongCount(): {checkSums4Dup.LongCount()} not equal to checkSumWithDup.Count: {checkSumWithDup.Count}.\n\tAnother process may be updating CheckSum.");
-				//	continue;
-				//}
-
+				// process the collection
                 foreach (var checkSum4Dup in checkSums4Dup)
                 {
 					// move the projected values into a row from the class DupOnHash in order to pass to the method
@@ -554,13 +551,17 @@ namespace DupesMaint2
 				}
 
 				if (++processedCount % 1000 == 0)
-				{
-					Serilog.Log.Information($"FindDupsUsingHash - {processedCount,6:N0}. Completed:{((processedCount * 100) / anonymousCount),3:N0}%.");
-				}
+					Log.Information($"FindDupsUsingHash - {processedCount,6:N0}. Completed:{((processedCount * 100) / anonymousCount),3:N0}%.");
 			}
 
 			_stopwatch.Stop();
-			Serilog.Log.Information($"FindDupsUsingHash - insertCheckSumDupsCount: {insertCheckSumDupsCount:N0}, updateCheckSumDupsBasedOnCount: {updateCheckSumDupsBasedOnCount:N0}, execution time: {_stopwatch.Elapsed.TotalMinutes:N1} mins.\n{new String('=', 150)}");
+			Log.Information($"""
+			FindDupsUsingHash - Finished
+				insertCheckSumDupsCount:		{insertCheckSumDupsCount:N0}
+				updateCheckSumDupsBasedOnCount: {updateCheckSumDupsBasedOnCount:N0}
+				execution time:					{_stopwatch.Elapsed.TotalMinutes:N1} mins.
+			{new String('=', 135)}
+			""");
 
 			//////////////////////////////
 			/// Local methods
@@ -590,11 +591,11 @@ namespace DupesMaint2
 
 			// check if a CheckSumDups row exists for this CheckSumId and hash values
 			var checkSumDupPlusBasedOn = popsDbContext.CheckSumDups
-											.Where(e => e.CheckSumId == dupOnHash.CheckSumId)
+											.Where(e => e.ChecksumId == dupOnHash.CheckSumId)
 											.Select(e => new
 											{
 												e.Id,
-												CheckSumDupsBasedOn = e.CheckSumDupsBasedOnRows.Select(b => new
+												CheckSumDupsBasedOn = e.CheckSumDupsBasedOn.Select(b => new
 												{
 													b.CheckSumId,
 													b.DupBasedOn,
@@ -608,14 +609,14 @@ namespace DupesMaint2
 			{
                 CheckSumDups checkSumDup1 = new()
                 {
-                    CheckSumId = dupOnHash.CheckSumId
+                    ChecksumId = dupOnHash.CheckSumId
                 };
 
 				// add the child row - CheckSumDupsBasedOn
-				checkSumDup1.CheckSumDupsBasedOnRows.Add(
+				checkSumDup1.CheckSumDupsBasedOn.Add(
                     new CheckSumDupsBasedOn
                     {
-                        CheckSumId = checkSumDup1.CheckSumId,
+                        CheckSumId = checkSumDup1.ChecksumId,
                         DupBasedOn = dupOnHash.DupBasedOn,
                         BasedOnVal = dupOnHash.BasedOnVal
                     });
@@ -627,7 +628,7 @@ namespace DupesMaint2
 
 				if (verbose)
                 {
-                    Serilog.Log.Information($"FindDupsUsingHash - Added new CheckSumDup and CheckSumDupsBasedOn rows, checkSum.Id: {checkSumDup1.CheckSumId}, hash: {dupOnHash.DupBasedOn}.");
+                    Log.Information($"FindDupsUsingHash - Added new CheckSumDup and CheckSumDupsBasedOn rows, checkSum.Id: {checkSumDup1.ChecksumId}, hash: {dupOnHash.DupBasedOn}.");
                 }
             }
             else     // just add the new CheckSumDupsBasedOn row for this CheckSumDup. Delete any existing value first.
@@ -636,20 +637,18 @@ namespace DupesMaint2
 				CheckSumDups checkSumDups = popsDbContext.CheckSumDups.Where(e => e.Id == checkSumDupPlusBasedOn.Id).FirstOrDefault();
 
 				// Get the CheckSumDupsBasedOn row for this CheckSumDup and hash
-				CheckSumDupsBasedOn checkSumDupsBasedOn1 = popsDbContext.CheckSumDupsBasedOn.Where(c => c.CheckSumId == checkSumDups.CheckSumId && c.DupBasedOn == dupOnHash.DupBasedOn).FirstOrDefault();
+				CheckSumDupsBasedOn checkSumDupsBasedOn1 = popsDbContext.CheckSumDupsBasedOn.Where(c => c.CheckSumId == checkSumDups.ChecksumId && c.DupBasedOn == dupOnHash.DupBasedOn).FirstOrDefault();
                 if (checkSumDupsBasedOn1 is not null)
                 {
 					checkSumDupsBasedOn1.BasedOnVal = dupOnHash.BasedOnVal;
 
 					if (verbose)
-					{
-						Serilog.Log.Information($"FindDupsUsingHash - Existing CheckSumDup, checkSum.Id: {checkSumDups.CheckSumId}, Updated CheckSumDupsBasedOn row with checkSum.Id: {checkSumDupsBasedOn1.CheckSumId}, " +
+						Log.Information($"FindDupsUsingHash - Existing CheckSumDup, checkSum.Id: {checkSumDups.ChecksumId}, Updated CheckSumDupsBasedOn row with checkSum.Id: {checkSumDupsBasedOn1.CheckSumId}, " +
 							$"hash: {dupOnHash.DupBasedOn}, checkSumDupsBasedOn1.BasedOnVal: {checkSumDupsBasedOn1.BasedOnVal}.");
-					}
 				}
 				else
                 {
-					checkSumDups.CheckSumDupsBasedOnRows.Add(
+					checkSumDups.CheckSumDupsBasedOn.Add(
 						new CheckSumDupsBasedOn
 						{
 							CheckSumId = dupOnHash.CheckSumId,
@@ -661,10 +660,8 @@ namespace DupesMaint2
 					updateCheckSumDupsBasedOnCount++;
 
 					if (verbose)
-					{
-						Serilog.Log.Information($"FindDupsUsingHash - Existing CheckSumDup, checkSum.Id: {checkSumDups.CheckSumId}, added CheckSumDupsBasedOn row with checkSum.Id: {checkSumDups.CheckSumId}, " +
+						Log.Information($"FindDupsUsingHash - Existing CheckSumDup, checkSum.Id: {checkSumDups.ChecksumId}, added CheckSumDupsBasedOn row with checkSum.Id: {checkSumDups.ChecksumId}, " +
 							$"hash: {dupOnHash.DupBasedOn}, dupOnHash.BasedOnVal: {dupOnHash.BasedOnVal}.");
-					}
 				}
 
 			}
