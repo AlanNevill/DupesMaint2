@@ -340,3 +340,5 @@ ASALocalRun/
 healthchecksdb
 
 Migrations/
+/ModelsTemp/CheckSum.cs
+/ModelsTemp/PhotosContext.cs
