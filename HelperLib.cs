@@ -323,10 +323,10 @@ namespace DupesMaint2
 				totalCount = 0; 
 				Interlocked.Add(ref totalCount, processedCount);
 				Interlocked.Add(ref totalCount, dropCount);
+
 				if ((totalCount) % 1000 == 0)
-				{
 					Log.Information($"CalculateHashes - {totalCount,6:N0}. Completed:{(((totalCount) * 100) / checkSums.Count),3:N0}%.");
-				}
+
 			});	// end of Parallel.ForEach
 
 
