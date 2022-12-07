@@ -2,7 +2,7 @@
   "profiles": {
     "DupesMaint2": {
       "commandName": "Project",
-      "commandLineArgs": "CalculateHashes --ShaHash true"
+      "commandLineArgs": "CalculateHashes --AverageHash true --DifferenceHash true --PerceptualHash true --verbose false"
     }
   }
 }
