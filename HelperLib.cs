@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using CoenM.ImageHash.HashAlgorithms;
+using Microsoft.Extensions.Configuration;
 using Serilog;
 using System;
 using System.Configuration;
@@ -42,6 +43,7 @@ using System.Data.Common;
 using System.Threading.Tasks;
 using System.Threading;
 using DirectoryList = System.Collections.Generic.IReadOnlyList<MetadataExtractor.Directory>;
+using CoenM.ImageHash;
 
 namespace DupesMaint2
 {
@@ -120,9 +122,9 @@ namespace DupesMaint2
 			new FileExtensionTypes { Type = ".MP", Group = "Video" },
 			new FileExtensionTypes { Type = ".MOV", Group = "Video" },
 			new FileExtensionTypes { Type = ".MTS", Group = "Video" },
+            new FileExtensionTypes { Type = ".TIFF", Group = "Photo"},
 			new FileExtensionTypes { Type = ".WMV", Group = "Video" },
-			new FileExtensionTypes { Type = ".WEBP", Group = "Photo"},
-            new FileExtensionTypes { Type = ".TIF", Group = "Photo"},
+			new FileExtensionTypes { Type = ".Webp", Group = "Photo"},
         };
 
 
@@ -348,25 +350,30 @@ namespace DupesMaint2
 			////////////////
 			// local methods
 			////////////////
-			decimal calcAverageHash(FileInfo fileInfo)
+			ulong calcAverageHash(FileInfo fileInfo)
 			{
-				AverageHash averageHash = new();    // instaniate the class
-				return (decimal)averageHash.Hash(GetStream(fileInfo));
+
+                var averageHash = new CoenM.ImageHash.HashAlgorithms.AverageHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
+				//using var stream = File.OpenRead(fileInfo.FullName);
+                return averageHash.Hash(File.OpenRead(fileInfo.FullName));
 			}
 
-			decimal calcDifferenceHash(FileInfo fileInfo)
+			ulong calcDifferenceHash(FileInfo fileInfo)
 			{
-				DifferenceHash differenceHash = new();    // instaniate the class
-				return (decimal)differenceHash.Hash(GetStream(fileInfo));
+				var differenceHash = new CoenM.ImageHash.HashAlgorithms.DifferenceHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
+                //using var stream = File.OpenRead(fileInfo.FullName);
+                return differenceHash.Hash(File.OpenRead(fileInfo.FullName));
 			}
 
-			decimal calcPerceptualHash(FileInfo fileInfo)
+			ulong calcPerceptualHash(FileInfo fileInfo)
 			{
-				PerceptualHash perceptualHash = new();    // instaniate the class
-				return (decimal)perceptualHash.Hash(GetStream(fileInfo));
+				var perceptualHash = new CoenM.ImageHash.HashAlgorithms.PerceptualHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
+                //using var stream = File.OpenRead(fileInfo.FullName);
+                return perceptualHash.Hash(File.OpenRead(fileInfo.FullName));
 			}
 
 		}
+
 
 	public static string calcShaHash2(FileInfo fileInfo)
 	{
@@ -381,6 +388,7 @@ namespace DupesMaint2
 		// BitConverter used to put all bytes into one string, hyphen delimited  
 		return BitConverter.ToString(bytes);
 	}
+
 
 	/// <summary>
 	/// Move all but the largest CheckSum files with the same PerceptualHash to a folder on the H drive
