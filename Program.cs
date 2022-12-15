@@ -152,7 +152,7 @@ internal class Program
             Log.Information( "Finished");
         }
 		return 0;
-    }
+    }	// end of method Main
 
     public static void BuildConfig()
     {
