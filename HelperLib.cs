@@ -380,7 +380,6 @@ public sealed class HelperLib
         {
 		System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 		int counter = 0;
-		//PopsDbContext popsDbContext = new();
 
 		var perceptualHashes = from p in _popsCtx!.CheckSum
 							   where p.PerceptualHash != null
@@ -400,8 +399,8 @@ public sealed class HelperLib
 				.Where(y => y.PerceptualHash == perceptualHash.Key && y.Folder.StartsWith(@"C:\Users\User"))
 				.ToList();
 
-                if (checkSums.Count == 0)
-				continue;
+            if (checkSums.Count == 0)
+			continue;
 
 			int maxSize = checkSums.Max(y => (int)y.FileSize!);
 			Log.Information($"perceptualHash.Key: {perceptualHash.Key}, checkSums.Count: {checkSums.Count}, maxSize: {maxSize:N0}");
@@ -410,8 +409,8 @@ public sealed class HelperLib
                 {
                     if (checkSum.FileSize == maxSize)
                     {
-					Log.Information($"PerceptualHash_Move2Hdrive - checkSum.Id: {checkSum.Id}, has maxSize: {maxSize:N0} and will not be moved");
-					continue;
+						Log.Information($"PerceptualHash_Move2Hdrive - checkSum.Id: {checkSum.Id}, has maxSize: {maxSize:N0} and will not be moved");
+						continue;
 				}
 
 				// Move this CheckSum file
@@ -422,33 +421,31 @@ public sealed class HelperLib
 		}
 
 		_stopwatch.Stop();
-		Serilog.Log.Information($"PerceptualHash_Move2Hdrive - Total execution time: {_stopwatch.Elapsed.TotalMinutes:N0} mins.\n{new String('-', 150)}");
+		Log.Information($"PerceptualHash_Move2Hdrive - Total execution time: {_stopwatch.Elapsed.TotalMinutes:N0} mins.\n{new String('-', 150)}");
 
 		//////////////////
 		// Local functions
 		//////////////////
 		void MoveTheFile(CheckSum checkSum, PopsDbContext popsDbContext1)
-            {
+        {
 			// Generate the new folder and create if necessary
 			DirectoryInfo directoryInfo = new(Path.Combine(@"H:\PerceptualHashes", checkSum.PerceptualHash.ToString()));
-                if (!directoryInfo.Exists)
-                {
+			if (!directoryInfo.Exists)
 				directoryInfo.Create();
-                }
 
-                // Move the file
-                try
-                {
+            // Move the file
+            try
+            {
 				File.Move(checkSum.FileFullName, Path.Combine(directoryInfo.FullName, checkSum.TheFileName),true);
-                }
-                catch (FileNotFoundException fnf)    // source file not found
-                {
-				Serilog.Log.Error($"PerceptualHash_Move2Hdrive - File not found, checkSum.Id: {checkSum.Id}\n{fnf}");
-                }
+            }
+				catch (FileNotFoundException fnf)    // source file not found
+            {
+				Log.Error($"PerceptualHash_Move2Hdrive - File not found, checkSum.Id: {checkSum.Id}\n{fnf}");
+            }
 
 			// Update the checkSum row
 			checkSum.Folder = directoryInfo.FullName;
-            _popsCtx!.SaveChanges();
+			_popsCtx!.SaveChanges();
 
 			if (verbose)
 				Serilog.Log.Information($"PerceptualHash_Move2Hdrive - checkSum.Id: {checkSum.Id}, checkSum.FileSize: {checkSum.FileSize:N0} was moved to: {checkSum.Folder}");
@@ -464,13 +461,12 @@ public sealed class HelperLib
 	/// <param name="verbose"></param>
 	public void FindDupsUsingHash(string hashType, bool verbose)
 	{
+		System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 		Log.Information($"""
 		FindDupsUsingHash - Starting
 			theHash:	{hashType}
 			verbose:	{verbose}
 		""");
-
-		System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
 		int processedCount = 0, insertCheckSumDupsBasedOnCount = 0;
 		object anonymousHash;
