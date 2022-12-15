@@ -53,13 +53,13 @@ public sealed class HelperLib
 
 	public static string? ConnectionString => Program._cnStr;
 
-    private static PopsDbContext? _popsCtx;
+    private static PhotosDbContext? photosCtx;
 
     // constructor
-    public HelperLib(IConfiguration config, PopsDbContext popsDbContext)
+    public HelperLib(IConfiguration config, PhotosDbContext photosDbContext)
     {
 		_config = config;
-		_popsCtx = popsDbContext;
+		photosCtx = photosDbContext;
 	}
 
 	// map file extensions to media group
@@ -157,13 +157,11 @@ public sealed class HelperLib
             if (type.Group != fileType)
             {
 				dropCount++;
-				if (verbose)
-					Log.Information($"LoadFileType - Ignored file extension: {fileInfo.Extension}, not of media type: {fileType}.");
-
+				if (verbose) Log.Information($"LoadFileType - Ignored file extension: {fileInfo.Extension}, not of media type: {fileType}.");
 				continue;
 			}
 
-			int existsCount = _popsCtx!.CheckSum.Where(x => x.FileFullName == fileInfo.FullName).Count();
+			int existsCount = photosCtx!.CheckSum.Where(x => x.FileFullName == fileInfo.FullName).Count();
 
             if (existsCount != 0)
             {
@@ -183,15 +181,14 @@ public sealed class HelperLib
 				TimerMs = 0,
 			};
 
-            _popsCtx.Add(checkSum);
-			if (verbose)
-				Log.Information($"LoadFileType - File {checkSum.FileFullName}, was added to CheckSum table.");
+            photosCtx.Add(checkSum);
+			if (verbose) Log.Information($"LoadFileType - File {checkSum.FileFullName}, was added to CheckSum table.");
 
 			if (++processCount % 1000 == 0)
 				Log.Information($"LoadFileType - {processCount,6:N0}. Completed: {(processCount * 100) / _files.Length}%. Processing folder: {fileInfo.DirectoryName}");
 		}
 
-        _popsCtx!.SaveChanges();
+        photosCtx!.SaveChanges();
 
 		_stopwatch.Stop();
 		Log.Information($"""
@@ -225,7 +222,7 @@ public sealed class HelperLib
 			verbose:		{verbose}
 		""");
 
-		List<CheckSum> checkSums = _popsCtx!.CheckSum.ToList();
+		List<CheckSum> checkSums = photosCtx!.CheckSum.ToList();
 
         Log.Information($"CalculateHashes - Starting Parallel.ForEach, checkSums.Count: {checkSums.Count:N0}");
             
@@ -301,8 +298,7 @@ public sealed class HelperLib
 				Log.Fatal(ex,$"CalculateHashes - id: {checkSum.Id}\n{new String('-', 150)}\n");
 			}
 
-			if (verbose)
-				Log.Information($"CalculateHashes - id: {checkSum.Id}, checkSum.AverageHash: {checkSum.AverageHash}, checkSum.DifferenceHash: {checkSum.DifferenceHash}, checkSum.PerceptualHash: {checkSum.PerceptualHash}.");
+			if (verbose) Log.Information($"CalculateHashes - id: {checkSum.Id}, checkSum.AverageHash: {checkSum.AverageHash}, checkSum.DifferenceHash: {checkSum.DifferenceHash}, checkSum.PerceptualHash: {checkSum.PerceptualHash}.");
 
 			Interlocked.Increment(ref processedCount);
 			totalCount = 0; 
@@ -316,14 +312,14 @@ public sealed class HelperLib
 
 
         // update the database
-        _popsCtx!.SaveChanges();
+        photosCtx!.SaveChanges();
 
 		_stopwatch.Stop();
 
         Log.Information($"""
 		CalculateHashes - Finished processing
 				parallel.ToString:	{parallel}
-				checkSums.Count:	{_popsCtx.CheckSum.LongCount():N0}
+				checkSums.Count:	{photosCtx.CheckSum.LongCount():N0}
 				processedCount:		{processedCount:N0}
 				dropCount:			{dropCount:N0}
 				execution time:		{_stopwatch.Elapsed.TotalMinutes:N1} mins
@@ -381,7 +377,7 @@ public sealed class HelperLib
 		System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 		int counter = 0;
 
-		var perceptualHashes = from p in _popsCtx!.CheckSum
+		var perceptualHashes = from p in photosCtx!.CheckSum
 							   where p.PerceptualHash != null
 							   group p by p.PerceptualHash into g
 							   where g.Count() > 1
@@ -392,10 +388,9 @@ public sealed class HelperLib
   
 		foreach (var perceptualHash in perceptualHashes)
 		{
-			PopsDbContext popsDbContext1 = new();
-			popsDbContext1.Database.SetCommandTimeout(TimeSpan.FromMinutes(2));
+            photosCtx.Database.SetCommandTimeout(TimeSpan.FromMinutes(2));
 
-			List<CheckSum> checkSums = popsDbContext1.CheckSum
+			List<CheckSum> checkSums = photosCtx.CheckSum
 				.Where(y => y.PerceptualHash == perceptualHash.Key && y.Folder.StartsWith(@"C:\Users\User"))
 				.ToList();
 
@@ -414,7 +409,7 @@ public sealed class HelperLib
 				}
 
 				// Move this CheckSum file
-				MoveTheFile(checkSum, popsDbContext1);
+				MoveTheFile(checkSum, photosCtx);
 
 				counter++;
 			}
@@ -426,10 +421,10 @@ public sealed class HelperLib
 		//////////////////
 		// Local functions
 		//////////////////
-		void MoveTheFile(CheckSum checkSum, PopsDbContext popsDbContext1)
+		void MoveTheFile(CheckSum checkSum, PhotosDbContext photoCtx)
         {
 			// Generate the new folder and create if necessary
-			DirectoryInfo directoryInfo = new(Path.Combine(@"H:\PerceptualHashes", checkSum.PerceptualHash.ToString()));
+			DirectoryInfo directoryInfo = new(Path.Combine(@"H:\PerceptualHashes", checkSum.PerceptualHash.ToString()!));
 			if (!directoryInfo.Exists)
 				directoryInfo.Create();
 
@@ -438,17 +433,16 @@ public sealed class HelperLib
             {
 				File.Move(checkSum.FileFullName, Path.Combine(directoryInfo.FullName, checkSum.TheFileName),true);
             }
-				catch (FileNotFoundException fnf)    // source file not found
+			catch (FileNotFoundException fnf)    // source file not found
             {
 				Log.Error($"PerceptualHash_Move2Hdrive - File not found, checkSum.Id: {checkSum.Id}\n{fnf}");
             }
 
 			// Update the checkSum row
 			checkSum.Folder = directoryInfo.FullName;
-			_popsCtx!.SaveChanges();
+			photosCtx!.SaveChanges();
 
-			if (verbose)
-				Serilog.Log.Information($"PerceptualHash_Move2Hdrive - checkSum.Id: {checkSum.Id}, checkSum.FileSize: {checkSum.FileSize:N0} was moved to: {checkSum.Folder}");
+			if (verbose) Log.Information($"PerceptualHash_Move2Hdrive - checkSum.Id: {checkSum.Id}, checkSum.FileSize: {checkSum.FileSize:N0} was moved to: {checkSum.Folder}");
 		}
 
 	}
@@ -496,8 +490,7 @@ public sealed class HelperLib
 		// process each hashType value
 		foreach (var theHash in (dynamic)anonymousHash)
         {
-            if (verbose)
-			Log.Information($"FindDupsUsingHash - theHash.hashVal: {theHash.hashVal}, {theHash.Count}");
+            if (verbose) Log.Information($"FindDupsUsingHash - theHash.hashVal: {theHash.hashVal}, {theHash.Count}");
 
 			// get a collection of CheckSums from the rows with this theHash value
 			List<CheckSum> checkSums;
@@ -505,11 +498,11 @@ public sealed class HelperLib
 			{
 				case "Sha":
 					string shaHashVal = theHash.hashVal;
-					checkSums = _popsCtx.CheckSum.Where(a => a.Sha == shaHashVal).Include(z => z.CheckSumDupsBasedOn).ToList();
+					checkSums = photosCtx!.CheckSum.Where(a => a.Sha == shaHashVal).Include(z => z.CheckSumDupsBasedOn).ToList();
 					break;
 				case "Perceptual":
 					decimal? hashVal = theHash.hashVal;
-					checkSums = _popsCtx.CheckSum.Where(a => a.PerceptualHash == hashVal).Include(z => z.CheckSumDupsBasedOn).ToList();
+					checkSums = photosCtx!.CheckSum.Where(a => a.PerceptualHash == hashVal).Include(z => z.CheckSumDupsBasedOn).ToList();
 					break;
 				default:
 					Log.Error($"FindDupsUsingHash - Hash: {hashType} not implemented, exiting.");
@@ -531,7 +524,7 @@ public sealed class HelperLib
 						BasedOnVal = theHash.hashVal.ToString()
 					};
 
-					_popsCtx.CheckSumDupsBasedOn.Add(checkSumDupsBasedOn);
+					photosCtx.CheckSumDupsBasedOn.Add(checkSumDupsBasedOn);
 					insertCheckSumDupsBasedOnCount++;
                 }
 			}
@@ -540,7 +533,7 @@ public sealed class HelperLib
 				Log.Information($"FindDupsUsingHash - {processedCount,6:N0}. Completed:{((processedCount * 100) / anonymousCount),3:N0}%.");
 		}
 
-		_popsCtx!.SaveChanges();
+		photosCtx!.SaveChanges();
 
 		_stopwatch.Stop();
 		Log.Information($"""
@@ -555,7 +548,7 @@ public sealed class HelperLib
 		/// Local methods
 		//////////////////////////////
 		object ShaHash() => 
-				from c in _popsCtx!.CheckSum
+				from c in photosCtx!.CheckSum
 				where c.Sha != null
 				group c by c.Sha
 				into g
@@ -564,7 +557,7 @@ public sealed class HelperLib
 				select new { hashVal = g.Key, Count = g.Count() };
 
 		object PerCeptualHash() =>
-				from c in _popsCtx!.CheckSum
+				from c in photosCtx!.CheckSum
 				where c.PerceptualHash != null
 				group c by c.PerceptualHash
 				into g
@@ -576,10 +569,10 @@ public sealed class HelperLib
 
         private static void CheckSumDupsBasedOn_upsert(CheckSumDupsBasedOn checkSumDupsBasedOn, bool verbose, ref int insertCheckSumDupsCount, ref int updateCheckSumDupsBasedOnCount, ref int insertCheckSumDupsBasedOnCount)
         {
-		//PopsDbContext popsDbContext = new ();
+		//PopsDbContext photosDbContext = new ();
 
 		//// check if a CheckSumDups row exists for this CheckSumId and theHash values
-		//var checkSumDupPlusBasedOn = popsDbContext.CheckSumDups
+		//var checkSumDupPlusBasedOn = photosDbContext.CheckSumDups
 		//								.Where(e => e.ChecksumId == checkSumDupsBasedOn.CheckSumId)
 		//								.Select(e => new
 		//								{
@@ -611,7 +604,7 @@ public sealed class HelperLib
   //                  });
 
 		//	// save the parent ChecSumDup and child CheckSumDupsBasedOn
-		//	popsDbContext.Add(checkSumDup1);
+		//	photosDbContext.Add(checkSumDup1);
 
 		//	insertCheckSumDupsCount++;
 
@@ -623,10 +616,10 @@ public sealed class HelperLib
   //          else     // just add the new CheckSumDupsBasedOn row for this CheckSumDup. Delete any existing value first.
   //          {
 		//	// Get the existing CheckSumDups row
-		//	CheckSumDups checkSumDups = popsDbContext.CheckSumDups.Where(e => e.Id == checkSumDupPlusBasedOn.Id).FirstOrDefault();
+		//	CheckSumDups checkSumDups = photosDbContext.CheckSumDups.Where(e => e.Id == checkSumDupPlusBasedOn.Id).FirstOrDefault();
 
 		//	// Get the CheckSumDupsBasedOn row for this CheckSumDup and theHash
-		//	CheckSumDupsBasedOn checkSumDupsBasedOn1 = popsDbContext.CheckSumDupsBasedOn.Where(c => c.CheckSumId == checkSumDups.ChecksumId && c.DupBasedOn == checkSumDupsBasedOn.DupBasedOn).FirstOrDefault();
+		//	CheckSumDupsBasedOn checkSumDupsBasedOn1 = photosDbContext.CheckSumDupsBasedOn.Where(c => c.CheckSumId == checkSumDups.ChecksumId && c.DupBasedOn == checkSumDupsBasedOn.DupBasedOn).FirstOrDefault();
   //              if (checkSumDupsBasedOn1 is not null)
   //              {
 		//		checkSumDupsBasedOn1.BasedOnVal = checkSumDupsBasedOn.BasedOnVal;
@@ -645,7 +638,7 @@ public sealed class HelperLib
 		//				BasedOnVal = checkSumDupsBasedOn.BasedOnVal
 		//			});
 
-		//		popsDbContext.Update(checkSumDups);
+		//		photosDbContext.Update(checkSumDups);
 		//		updateCheckSumDupsBasedOnCount++;
 
 		//		if (verbose)
@@ -655,7 +648,7 @@ public sealed class HelperLib
 
 		//}
  
-		//popsDbContext.SaveChanges();
+		//photosDbContext.SaveChanges();
 	}
 
 	/// <summary>
@@ -686,7 +679,7 @@ public sealed class HelperLib
 			CheckSum checkSum = new()
 			{
 				Sha = "",
-				Folder = fi.DirectoryName,
+				Folder = fi.DirectoryName!,
 				TheFileName = fi.Name,
 				FileExt = fi.Extension,
 				FileSize = (int)fi.Length,
@@ -741,11 +734,10 @@ public sealed class HelperLib
 		Serilog.Log.Information($"CameraRoll_Move - Starting\n\tmediaFileType: {mediaFileType}\n\tverbose: {verbose}\n");
 		System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 
-		PopsDbContext popsDbContext = new();
 		int processedCount=0, dropCount = 0;
 
 		// Get all the CheckSum rows where the folder is 'C:\Users\User\OneDrive\Pictures\Camera Roll' and the MediaFileType = parameter
-		List<CheckSum> checkSum = popsDbContext.CheckSum.Where(a => a.Folder == @"C:\Users\User\OneDrive\Pictures\Camera Roll" && a.MediaFileType == mediaFileType)
+		List<CheckSum> checkSum = photosCtx!.CheckSum.Where(a => a.Folder == @"C:\Users\User\OneDrive\Pictures\Camera Roll" && a.MediaFileType == mediaFileType)
 									.ToList();
             if (checkSum.Count == 0)
             {
@@ -811,10 +803,7 @@ public sealed class HelperLib
 												createDateTime.Month.ToString("00"));
 					processedCount++;
 
-					if (verbose)
-					{
-						Serilog.Log.Information($"CameraRoll_Move - file: {row.FileFullName} was moved to {targetFile}");
-					}
+					if (verbose) Log.Information($"CameraRoll_Move - file: {row.FileFullName} was moved to {targetFile}");
 				}
 				catch (IOException ioEXC)
                     {
@@ -827,7 +816,7 @@ public sealed class HelperLib
 					throw;
                     }
 			}
-            _popsCtx!.SaveChanges();
+            photosCtx!.SaveChanges();
 		}
 
 		// get the EXIF TagDateTimeOriginal date from the photo's EXIF data
@@ -838,7 +827,7 @@ public sealed class HelperLib
 
 			if (_ExifSubIfdDirectory is not null)
 			{
-				string _sCreateDateTime = _ExifSubIfdDirectory?.GetDescription(ExifSubIfdDirectory.TagDateTimeOriginal);
+				string _sCreateDateTime = _ExifSubIfdDirectory.GetDescription(ExifSubIfdDirectory.TagDateTimeOriginal)!;
 				if (!string.IsNullOrEmpty(_sCreateDateTime) && !_sCreateDateTime.Equals("0000:00:00 00:00:00"))
 				{
 					if (_sCreateDateTime[0..10].IndexOf(':') > -1)
@@ -964,10 +953,10 @@ public sealed class HelperLib
 		var CnStr = new SqlConnectionStringBuilder(ConnectionString);
 
 		// Log the assembly version number
-		string assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version.ToString();
-		Serilog.Log.Information(new String('=', 60));
-		Serilog.Log.Information($"DupesMaint2 v{assemblyVersion} - starting using DATABASE: {CnStr.InitialCatalog.ToUpper()}");
-		Serilog.Log.Information(new String('=', 60));
+		string assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version!.ToString();
+		Log.Information(new String('=', 60));
+		Log.Information($"DupesMaint2 v{assemblyVersion} - starting using DATABASE: {CnStr.InitialCatalog.ToUpper()}");
+		Log.Information(new String('=', 60));
 	}
 
 	private static Stream GetStream(FileInfo fileInfo)
@@ -1062,4 +1051,49 @@ public sealed class HelperLib
 
 		return directories;
 	}
+
+    internal static void TrainingCSV(bool verbose)
+    {
+        // Open a CSV file for writing
+        string csvFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),"DupesMaint2", "Training.csv");
+
+        Log.Information($"TrainingCSV - Writing CSV file: {csvFile}");
+
+        using (StreamWriter sw = new StreamWriter(csvFile))
+        {
+            // Write the header
+            sw.WriteLine("HashValue,CheckSumId1,Filename1,CheckSumId2,Filename2,1or2");
+
+            // Get the list of files to process
+            List<VCheckSumBasedOnGroup> vCheckSumBasedOnGroup = photosCtx!.VCheckSumBasedOnGroup.Where(a => a.TheCount == 2 && a.DupBasedOn=="Sha").ToList();
+            Log.Information($"TrainingCSV - vCheckSumBasedOnGroup.Count: {vCheckSumBasedOnGroup.Count:N0}");
+
+            // Loop through the duplicate Sha values getting the CheckSum rows
+            foreach (var ShaDup in vCheckSumBasedOnGroup)
+            {
+                // Get the CheckSum rows for the Sha value
+                List<CheckSum> checkSums = photosCtx!.CheckSum.Where(a => a.Sha == ShaDup.BasedOnVal).ToList();
+
+                // this should return a list of 2 CheckSum rows
+                if (checkSums.Count != 2)
+                {
+                    Log.Fatal($"TrainingCSV - CheckSums count is {checkSums.Count} should be 2, Sha {ShaDup.BasedOnVal}");
+                    return;
+                }
+
+                // Get the Id and FileFullName for each CheckSum row
+                int checkSumId1 = checkSums[0].Id;
+                string filename1 = checkSums[0].FileFullName;
+                int checkSumId2 = checkSums[1].Id;
+                string filename2 = checkSums[1].FileFullName;
+
+                if (verbose) Log.Information($"TrainingCSV - {ShaDup.BasedOnVal} - {checkSumId1} - {filename1} - {checkSumId2} - {filename2}");
+				
+                // Write the CSV row
+                sw.WriteLine($"{ShaDup.BasedOnVal},{checkSumId1},{filename1},{checkSumId2},{filename2}");
+            }
+        }
+
+        Log.Information($"TrainingCSV - Finished writing CSV file: {csvFile}");
+    }
 }

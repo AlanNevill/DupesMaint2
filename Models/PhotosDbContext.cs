@@ -1,32 +1,32 @@
 ﻿using System;
-using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Configuration;
+using DupesMaint2.Models;
 
 namespace DupesMaint2.Models
 {
-    public partial class PopsDbContext : DbContext
+    public partial class PhotosDbContext : DbContext
     {
-
-        public PopsDbContext()
+        public PhotosDbContext()
         {
         }
 
-        public PopsDbContext(DbContextOptions<PopsDbContext> options)
+        public PhotosDbContext(DbContextOptions<PhotosDbContext> options)
             : base(options)
-        {
-        }
+        {}
 
         public virtual DbSet<CheckSum> CheckSum { get; set; }
 
         public virtual DbSet<CheckSumDupsBasedOn> CheckSumDupsBasedOn { get; set; }
 
+        public virtual DbSet<VCheckSumBasedOnGroup> VCheckSumBasedOnGroup { get; set; }
+
+        public virtual DbSet<HashTypes> HashValueTypes { get; set; }
+
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            // TODO: used to enable console logging of SQL commands issued by DBcontext
-            //optionsBuilder.UseLoggerFactory(MyLoggerFactory)  //tie-up DbContext with LoggerFactory object
-            //    .EnableSensitiveDataLogging()
-            //    .UseSqlServer(@"Server=SNOWBALL\MSSQLSERVER01;Database=Pops;Trusted_Connection=True;");
-
             if (!optionsBuilder.IsConfigured)
             {
                 optionsBuilder.UseSqlServer(Program._cnStr);
@@ -58,6 +58,13 @@ namespace DupesMaint2.Models
                     //.HasForeignKey(c => c.CheckSumId)
                     //.HasPrincipalKey(c => c.Id)
                     .HasConstraintName("FK_CheckSumDupsBasedOn_CheckSumId");
+            });
+
+            modelBuilder.Entity<HashTypes>(entity => entity.HasNoKey());
+
+            modelBuilder.Entity<VCheckSumBasedOnGroup>(entity =>
+            {
+                entity.ToView("vCheckSumBasedOn_Group");
             });
 
 

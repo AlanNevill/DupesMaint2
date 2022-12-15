@@ -2,11 +2,7 @@
   "profiles": {
     "DupesMaint2": {
       "commandName": "Project",
-<<<<<<< HEAD
-      "commandLineArgs": "FindDupsUsingHash --hash Sha"
-=======
-      "commandLineArgs": "CalculateHashes --AverageHash true --DifferenceHash true --PerceptualHash true --verbose false"
->>>>>>> b697615f344054a32adf012bff477ece8220e86c
+      "commandLineArgs": "TrainingCSV"
     }
   }
 }

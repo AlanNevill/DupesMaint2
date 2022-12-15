@@ -4,7 +4,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using System.CommandLine;
-using System.CommandLine.Builder;
+//using System.CommandLine.Builder;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
 using Microsoft.Data.SqlClient;
@@ -28,7 +28,7 @@ internal class Program
         var host = Host.CreateDefaultBuilder()
             .ConfigureServices((context, services) =>
             {
-                services.AddDbContext<PopsDbContext>(options =>
+                services.AddDbContext<PhotosDbContext>(options =>
                 {
                     options.UseSqlServer(_cnStr);
                 });
@@ -130,18 +130,29 @@ internal class Program
 		};
 		command7.Handler = CommandHandler.Create((bool verbose) => { HelperLib.PerceptualHash_Move2Hdrive(verbose); });
 		rootCommand.AddCommand(command7);
-		#endregion
+        #endregion
+
+        // Command8 - Create a CSV file of SHA hashes where duplicate count is 2. This is to create a training CSV file for the ML.NET model.
+        #region "subcommand8 Training CSV
+        Command command8 = new("TrainingCSV", "Create a CSV file of SHA hashes where duplicate count is 2. This is to create a training CSV file for the ML.NET model")
+        {
+            new Option<bool>("--verbose", getDefaultValue: () =>false, "Verbose logging.")
+                .AddSuggestions("true","false")
+        };
+        command8.Handler = CommandHandler.Create((bool verbose) => { HelperLib.TrainingCSV(verbose); });
+        rootCommand.AddCommand(command8);
+        #endregion
 
 
-		// set up common functionality like --help, --version, and dotnet-suggest support
-		var commandLine = new CommandLineBuilder(rootCommand)
-			.UseDefaults() // automatically configures dotnet-suggest
-			.Build();
+   //     // set up common functionality like --help, --version, and dotnet-suggest support
+   //     var commandLine = new CommandLineBuilder(rootCommand)
+			//.UseDefaults() // automatically configures dotnet-suggest
+			//.Build();
 
 		// call the method defined in the handler
 		try
 		{
-			return commandLine.InvokeAsync(args).Result;
+			return rootCommand.InvokeAsync(args).Result;
 		}
 		catch (Exception exc)
 		{
@@ -186,14 +197,14 @@ internal class Program
         var CnStr = new SqlConnectionStringBuilder(_cnStr);
 
         Log.Information($"""
-        {new String('-', 109)}
-                DupesMain2    
+        {new String('-', 106)}
+                {typeof(Program).Assembly.FullName}     
                 Assembly version:       {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version}
                 Server:                 {CnStr.DataSource.ToUpper()}
                 Database:               {CnStr.InitialCatalog.ToUpper()}
                 OneDrivePhotos:         {OneDrivePhotos}
                 OneDriveVideos:         {OneDriveVideos}
-        {new String('-', 135)}
+        {new String('-', 122)}
         """);
     }
 }

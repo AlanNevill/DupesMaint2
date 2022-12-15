@@ -78,5 +78,8 @@ public partial class CheckSum
     public string? ToDelete { get; set; }
 
     [InverseProperty("CheckSum")]
-    public ICollection<CheckSumDupsBasedOn> CheckSumDupsBasedOn { get; set; } //= new List<CheckSumDupsBasedOn>();
+    public virtual ICollection<CheckSumDupsBasedOn> CheckSumDupsBasedOn { get; } = new List<CheckSumDupsBasedOn>();
+
+    [NotMapped]
+    public string? ImageFileName { get; set; }
 }
