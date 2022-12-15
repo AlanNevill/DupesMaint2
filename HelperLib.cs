@@ -330,37 +330,37 @@ public sealed class HelperLib
 		{new String('-', 135)}
 		""");
 
-		////////////////
-		// local methods
-		////////////////
-		ulong calcAverageHash(FileInfo fileInfo)
-		{
 
-                var averageHash = new CoenM.ImageHash.HashAlgorithms.AverageHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
-			//using var stream = File.OpenRead(fileInfo.FullName);
-                return averageHash.Hash(File.OpenRead(fileInfo.FullName));
-		}
+        ////////////////
+        // local methods
+        ////////////////
+        ulong calcAverageHash(FileInfo fileInfo)
+        {
 
-		ulong calcDifferenceHash(FileInfo fileInfo)
-		{
-			var differenceHash = new CoenM.ImageHash.HashAlgorithms.DifferenceHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
-                //using var stream = File.OpenRead(fileInfo.FullName);
-                return differenceHash.Hash(File.OpenRead(fileInfo.FullName));
-		}
+            var averageHash = new CoenM.ImageHash.HashAlgorithms.AverageHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
+                                                                                   //using var stream = File.OpenRead(fileInfo.FullName);
+            return averageHash.Hash(File.OpenRead(fileInfo.FullName));
+        }
 
-		ulong calcPerceptualHash(FileInfo fileInfo)
-		{
-			var perceptualHash = new CoenM.ImageHash.HashAlgorithms.PerceptualHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
-                //using var stream = File.OpenRead(fileInfo.FullName);
-                return perceptualHash.Hash(File.OpenRead(fileInfo.FullName));
-		}
+        ulong calcDifferenceHash(FileInfo fileInfo)
+        {
+            var differenceHash = new CoenM.ImageHash.HashAlgorithms.DifferenceHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
+                                                                                         //using var stream = File.OpenRead(fileInfo.FullName);
+            return differenceHash.Hash(File.OpenRead(fileInfo.FullName));
+        }
 
-	}
+        ulong calcPerceptualHash(FileInfo fileInfo)
+        {
+            var perceptualHash = new CoenM.ImageHash.HashAlgorithms.PerceptualHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
+                                                                                         //using var stream = File.OpenRead(fileInfo.FullName);
+            return perceptualHash.Hash(File.OpenRead(fileInfo.FullName));
+        }
 
+    }
 
-public static string calcShaHash2(FileInfo fileInfo)
-{
-	// calculate the SHA256 checkSum for the file and return it with the elapsed processing time using a tuple
+	public static string calcShaHash2(FileInfo fileInfo)
+	{
+		// calculate the SHA256 checkSum for the file and return it with the elapsed processing time using a tuple
 
 	FileStream fs = fileInfo.OpenRead();
 	//fs.Position = 0;
@@ -372,12 +372,11 @@ public static string calcShaHash2(FileInfo fileInfo)
 	return BitConverter.ToString(bytes);
 }
 
-
-/// <summary>
-/// Move all but the largest CheckSum files with the same PerceptualHash to a folder on the H drive
-/// </summary>
-/// <param name="verbose"></param>
-public static void PerceptualHash_Move2Hdrive(bool verbose)
+	/// <summary>
+	/// Move all but the largest CheckSum files with the same PerceptualHash to a folder on the H drive
+	/// </summary>
+	/// <param name="verbose"></param>
+	public static void PerceptualHash_Move2Hdrive(bool verbose)
         {
 		System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
 		int counter = 0;
