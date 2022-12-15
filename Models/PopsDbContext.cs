@@ -18,10 +18,6 @@ namespace DupesMaint2.Models
 
         public virtual DbSet<CheckSum> CheckSum { get; set; }
 
-        public virtual DbSet<CheckSumDups> CheckSumDups { get; set; }
-
-        public virtual DbSet<DupOnHash> DupOnHash { get; set; }
-
         public virtual DbSet<CheckSumDupsBasedOn> CheckSumDupsBasedOn { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
@@ -49,27 +45,21 @@ namespace DupesMaint2.Models
                 entity.Property(e => e.CreateYear).HasComputedColumnSql("(datepart(year,[CreateDateTime]))", false);
                 entity.Property(e => e.FileFullName).HasComputedColumnSql("(([Folder]+'\\')+[TheFileName])", false);
                 entity.Property(e => e.FormatValid).IsFixedLength();
-            });
-
-            modelBuilder.Entity<CheckSumDups>(entity =>
-            {
-                entity.HasKey(e => e.Id).HasName("PK_CheckSumDups_ID");
-
                 entity.Property(e => e.ToDelete)
-                    .HasDefaultValueSql("('N')")
-                    .IsFixedLength();
-
-                entity.HasOne(d => d.Checksum).WithOne(p => p.CheckSumDups).HasConstraintName("fk_CheckSumDups_CheckSum");
+                               .HasDefaultValueSql("('N')")
+                               .IsFixedLength();
             });
 
+            // implement foreign kep automatic collection CheckSum owns 0,1 or many ChackSumDupsBasedOn
             modelBuilder.Entity<CheckSumDupsBasedOn>(entity =>
             {
-                entity.HasOne(d => d.CheckSum).WithMany(p => p.CheckSumDupsBasedOn)
-                    .HasPrincipalKey(p => p.ChecksumId);
+                entity.HasOne(d => d.CheckSum)
+                    .WithMany(p => p.CheckSumDupsBasedOn)
+                    //.HasForeignKey(c => c.CheckSumId)
+                    //.HasPrincipalKey(c => c.Id)
+                    .HasConstraintName("FK_CheckSumDupsBasedOn_CheckSumId");
             });
 
-
-            modelBuilder.Entity<DupOnHash>().HasNoKey();
 
             OnModelCreatingPartial(modelBuilder);
         }

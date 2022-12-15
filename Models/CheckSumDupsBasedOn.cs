@@ -19,5 +19,7 @@ public partial class CheckSumDupsBasedOn
     [Unicode(false)]
     public string BasedOnVal { get; set; } = null!;
 
-    public virtual CheckSumDups CheckSum { get; set; } = null!;
+    [ForeignKey("CheckSumId")]
+    [InverseProperty("CheckSumDupsBasedOn")]
+    public virtual CheckSum CheckSum { get; set; } = null!;
 }

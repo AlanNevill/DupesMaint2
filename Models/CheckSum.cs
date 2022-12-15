@@ -73,6 +73,10 @@ public partial class CheckSum
 
     public int? CreateMonth { get; set; }
 
-    [InverseProperty("Checksum")]
-    public virtual CheckSumDups? CheckSumDups { get; set; }
+    [StringLength(1)]
+    [Unicode(false)]
+    public string? ToDelete { get; set; }
+
+    [InverseProperty("CheckSum")]
+    public ICollection<CheckSumDupsBasedOn> CheckSumDupsBasedOn { get; set; } //= new List<CheckSumDupsBasedOn>();
 }

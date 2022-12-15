@@ -1,14 +1,14 @@
-﻿using System.Data.SqlClient;
+﻿using DupesMaint2.Models;
 using Microsoft.Extensions.Configuration;
-using System;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+using Serilog;
 using System.CommandLine;
+using System.CommandLine.Builder;
 using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
-using System.IO;
-using Microsoft.Extensions.DependencyInjection;
-using Serilog;
-using System.ComponentModel;
-using System.CommandLine.Builder;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 
 namespace DupesMaint2;
 
@@ -23,14 +23,32 @@ internal class Program
     private static int Main(string[] args)
 	{
 		BuildConfig();
-        
-		// Uses System.CommandLine beta library
-		// see https://github.com/dotnet/command-line-api/wiki/Your-first-app-with-System.CommandLine
-		// PM> Install-Package System.CommandLine -Version 2.0.0-beta1.20104.2
 
-		// Using Arity example:  new Option("--sport", argument: new Argument<string> { Arity = ArgumentArity.ExactlyOne })
+        // dependency injection
+        var host = Host.CreateDefaultBuilder()
+            .ConfigureServices((context, services) =>
+            {
+                services.AddDbContext<PopsDbContext>(options =>
+                {
+                    options.UseSqlServer(_cnStr);
+                });
+                //services.AddTransient<IGreetingService, GreetingService>();
+                services.AddTransient<HelperLib, HelperLib>();
+            })
+            .Build();
 
-		RootCommand rootCommand = new RootCommand("Load File Type")
+
+        // set up the HelperLib service
+        var svcHelperLib = ActivatorUtilities.CreateInstance<HelperLib>(host.Services);
+
+
+        // Uses System.CommandLine beta library
+        // see https://github.com/dotnet/command-line-api/wiki/Your-first-app-with-System.CommandLine
+        // PM> Install-Package System.CommandLine -Version 2.0.0-beta1.20104.2
+
+        // Using Arity example:  new Option("--sport", argument: new Argument<string> { Arity = ArgumentArity.ExactlyOne })
+
+        RootCommand rootCommand = new RootCommand("Load File Type")
 			{
 				new Option<DirectoryInfo>("--folder", "The root folder of the tree to scan which must exist, 'F:/Picasa backup/c/photos'.").ExistingOnly(),
 				new Option<string>("--fileType",  "File media type to load, Photo or Video.").FromAmong("Photo","Video"),
@@ -93,13 +111,13 @@ internal class Program
 
 
 		// Command6 - CheckSumDups insert or update based on hash from CheckSum
-		#region "subcommand6 CheckSumDups - insert or update CheckSumDups based on hash from CheckSum"
-		Command command6 = new ("FindDupsUsingHash", "CheckSumDups - insert or update CheckSumDups based on hash from CheckSum.")
+		#region "subcommand6 CheckSumDupsBasedOn - insert or update CheckSumDupsBasedOn based on 1 of the hashes from CheckSum"
+		Command command6 = new ("FindDupsUsingHash", "CheckSumDupsBasedOn - insert or update CheckSumDupsBasedOn based on hash from CheckSum.")
 		{
-			new Option<string>("--hash", "Hash to use SHA, average, difference, perceptual.").FromAmong("Sha", "Average", "Difference", "Perceptual"),
+			new Option<string>("--hash", "Hash to use: SHA, average, difference, perceptual.").FromAmong("Sha", "Average", "Difference", "Perceptual"),
 			new Option<bool>("--verbose", getDefaultValue: () => false, "Verbose logging.")
 		};
-		command6.Handler = CommandHandler.Create((string hash, bool verbose) => { HelperLib.FindDupsUsingHash(hash, verbose); });
+		command6.Handler = CommandHandler.Create((string hash, bool verbose) => {svcHelperLib.FindDupsUsingHash(hash, verbose); });
 		rootCommand.AddCommand(command6);
 		#endregion
 
