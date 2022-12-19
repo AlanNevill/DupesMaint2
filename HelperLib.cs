@@ -1096,4 +1096,52 @@ public sealed class HelperLib
 
         Log.Information($"TrainingCSV - Finished writing CSV file: {csvFile}");
     }
+
+    /// <summary>
+    /// Command 9 Read a CSV file of SHA hashes where duplicate count is 2 and delete the CheckSum based on the ToDelete column.
+    /// </summary>
+    /// <param name="verbose"></param>
+    /// <param name="CSVfile"></param>
+    internal static void ShaDelete(bool verbose, FileInfo CSVfile)
+    {
+        // Open the CSV file for reading
+        Log.Information($"ShaDelete - Reading CSV file: {CSVfile.FullName}");
+
+        // read all the lines into a list
+        List<string> lines = File.ReadAllLines(CSVfile.FullName).ToList();
+		
+		foreach (string line in lines)
+		{
+            string[] fields = line.Split(',');
+			if (fields is [string CheckSumId1, _, string CheckSumId2, _, string ToDelete])   // 5 fields in the CSV file
+			{
+                int checkSumId = (ToDelete == "1") ? int.Parse(CheckSumId1) : int.Parse(CheckSumId2);
+ 
+                // Get the CheckSum row
+                CheckSum checkSum = photosCtx!.CheckSum.Find(checkSumId)!;
+                if (checkSum is null)
+                {
+                    Log.Fatal($"ShaDelete - CheckSumId {checkSumId} not found");
+                    return;
+                }
+
+				// Format the file name depending on which machine is running the code
+                string fileFullName = Environment.MachineName == "WILLBOT" ? checkSum.FileFullName.Replace("\\User\\", "\\Pops\\") : checkSum.FileFullName;
+				
+                // Delete the file
+                if (verbose) Log.Information($"ShaDelete - Deleting, CheckSum id: {checkSum.Id}: fileFullName: {fileFullName}");
+                File.Delete(fileFullName);
+
+                // Delete the CheckSum row
+                photosCtx.CheckSum.Remove(checkSum);
+                photosCtx.SaveChanges();
+            }
+			else  // bad line
+			{
+                Log.Fatal($"ShaDelete - Invalid line in CSV file: {line}");
+                return;
+            }
+        }
+        Log.Information($"ShaDelete - Finished, lines.Count: {lines.Count:N0}");
+    }
 }

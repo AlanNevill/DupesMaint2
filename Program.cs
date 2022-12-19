@@ -42,55 +42,60 @@ internal class Program
         var svcHelperLib = ActivatorUtilities.CreateInstance<HelperLib>(host.Services);
 
 
-        // Uses System.CommandLine beta library
-        // see https://github.com/dotnet/command-line-api/wiki/Your-first-app-with-System.CommandLine
-        // PM> Install-Package System.CommandLine -Version 2.0.0-beta1.20104.2
+		// Uses System.CommandLine beta library
+		// see https://github.com/dotnet/command-line-api/wiki/Your-first-app-with-System.CommandLine
 
-        // Using Arity example:  new Option("--sport", argument: new Argument<string> { Arity = ArgumentArity.ExactlyOne })
-
-        RootCommand rootCommand = new RootCommand("Load File Type")
-			{
-				new Option<DirectoryInfo>("--folder", "The root folder of the tree to scan which must exist, 'F:/Picasa backup/c/photos'.").ExistingOnly(),
-				new Option<string>("--fileType",  "File media type to load, Photo or Video.").FromAmong("Photo","Video"),
-				new Option<bool>("--replace", getDefaultValue: () => false,  "Replace default (true) or append (false) to the db tables CheckSum & CheckSumDupes.") {IsRequired = false },
-				new Option<bool>("--verbose", getDefaultValue: () => false,  "Verbose logging.") {IsRequired = false }
-			};
-		// setup the root command handler
-		rootCommand.Handler = CommandHandler.Create((DirectoryInfo folder, string fileType, bool replace, bool verbose) => 
-			{ HelperLib.LoadFileType(folder, fileType, replace, verbose); });
-
-
-		// sub command to extract EXIF date/time from all JPG image files in a folder tree
-		#region "subcommand2 EXIF"
-		Command command2 = new Command("EXIF", "extract EXIF date/time from all JPG image files in a folder tree")
+		// define command options
+		var folder = new Option<DirectoryInfo>("--folder", "The root folder of the tree to scan which must exist, 'F:/Picasa backup/c/photos'.").ExistingOnly();
+		var mediaType = new Option<string>("--mediaType", "File media type to load, Photo or Video.").FromAmong("Photo", "Video");
+		var replace = new Option<bool>("--replace", getDefaultValue: () => false, "Replace default (true) or append (false) to the db tables CheckSum & CheckSumDupes.") { IsRequired = false };
+		var verbose = new Option<bool>("--verbose", getDefaultValue: () => false, "Verbose logging.") { IsRequired = false };
+		var image = new Option<FileInfo>("--image", "An image file, 'C:\\Users\\User\\OneDrive\\Photos\\2013\\02\\2013-02-24 12.34.54-3.jpg'").ExistingOnly();
+        var ShaHash = new Option<bool>("--ShaHash", getDefaultValue: () => false, "Calculate the ShaHash.") { IsRequired = true };
+        var AverageHash = new Option<bool>("--AverageHash", getDefaultValue: () => false, "Calculate the AverageHash.") { IsRequired = true };
+        var DifferenceHash = new Option<bool>("--DifferenceHash", getDefaultValue: () => false, "Calculate the DifferenceHash.") { IsRequired = true };
+        var PerceptualHash = new Option<bool>("--PerceptualHash", getDefaultValue: () => false, "Calculate the PerceptualHash.") { IsRequired = true };
+        var Hash = new Option<string>("--hash", "Hash to use: SHA, average, difference, perceptual.").FromAmong("Sha", "Average", "Difference", "Perceptual");
+        var CSVfile = new Option<FileInfo>("--CSVfile", "A CSV file holding details of the CheckSum Ids to delete").ExistingOnly();
+        
+        #region Root command	
+        RootCommand rootCommand = new("Load File Type")
 		{
-			new Option<DirectoryInfo>("--folder", "The root folder to scan image file, 'C:\\Users\\User\\OneDrive\\Photos").ExistingOnly(),
-			new Option<bool>("--replace", getDefaultValue: () => true, "Replace default (true) or append (false) to the db tables CheckSum."){ IsRequired = true }
+            folder, mediaType,  replace, verbose
+        };
+		
+		// setup the root command handler
+		rootCommand.SetHandler((folder, mediaType, replace, verbose) => { HelperLib.LoadFileType(folder, mediaType, replace, verbose); }, folder, mediaType,  replace, verbose);
+        #endregion
+
+        // sub command to extract EXIF date/time from media type Photo files in a folder tree
+        #region "subcommand2 EXIF"
+        Command command2 = new("EXIF", "extract EXIF date/time from media type Photo files in a folder tree")
+		{
+			folder, replace        
 		};
-		command2.Handler = CommandHandler.Create((DirectoryInfo folder, bool replace) => {HelperLib.ProcessEXIF(folder, replace); });
+		command2.SetHandler((folder, replace) => {HelperLib.ProcessEXIF(folder, replace);}, folder, replace);
 		rootCommand.AddCommand(command2);
 		#endregion
 
-
-		// Command3 - Log the EXIF directories for a photo or video media file
+		// Command3 - Log the internal EXIF directories for a photo or video media file
 		#region "subcommand3 anEXIF"
-		Command command3 = new Command("anEXIF","Log the EXIF data from a single file.")
+		Command command3 = new("anEXIF","Log the EXIF data from a single file.")
 		{
-			new Option<FileInfo>("--image", "An image file, 'C:\\Users\\User\\OneDrive\\Photos\\2013\\02\\2013-02-24 12.34.54-3.jpg'").ExistingOnly()
+			image
 		};
-		command3.Handler = CommandHandler.Create((FileInfo image) => {HelperLib.ProcessAnEXIF(image); });
+		command3.SetHandler((image) => {HelperLib.ProcessAnEXIF(image); }, image);
 		rootCommand.AddCommand(command3);
 		#endregion
 
 
 		// Command4 - CameraRoll_Move
 		#region "subcommand4 CameraRoll_Move"
-		Command command4 = new ("CameraRoll_Move", "Move media file types from CameraRoll folder to date folders.")
+		Command command4 = new("CameraRoll_Move", "Move media file types from CameraRoll folder to date folders.")
 		{
-			new Option<string>("--mediaFileType", "Photo or Video").FromAmong("Photo","Video"),
-			new Option<bool>("--verbose", getDefaultValue: () => false, "Verbose logging") { IsRequired = false }
-		};
-		command4.Handler = CommandHandler.Create((string mediaFileType, bool verbose) => {HelperLib.CameraRoll_Move(mediaFileType, verbose); });
+            mediaType, verbose
+        };
+		command4.SetHandler((mediaType, verbose) => {HelperLib.CameraRoll_Move(mediaType, verbose);}, mediaType, verbose);
 		rootCommand.AddCommand(command4);
 		#endregion
 
@@ -99,25 +104,22 @@ internal class Program
 		#region "subcommand5 CalculateHashes - Calculate hashes and store in CheckSum"
 		Command command5 = new ("CalculateHashes", "Calculate and store hashes in the CheckSum table.")
 		{
-			new Option<bool>("--ShaHash", getDefaultValue: () => false, "Calculate the ShaHash.") { IsRequired = true },
-			new Option<bool>("--AverageHash", getDefaultValue: () => false, "Calculate the AverageHash.") { IsRequired = true },
-			new Option<bool>("--DifferenceHash", getDefaultValue: () => false, "Calculate the DifferenceHash.") { IsRequired = true },
-			new Option<bool>("--PerceptualHash", getDefaultValue: () => false, "Calculate the PerceptualHash.") { IsRequired = true },
-			new Option<bool>("--verbose", getDefaultValue: () => false, "Verbose logging.")
-		};
-		command5.Handler = CommandHandler.Create((bool ShaHash, bool averageHash, bool differenceHash, bool perceptualHash, bool verbose) => { HelperLib.CalculateHashes(ShaHash, averageHash, differenceHash, perceptualHash, verbose); });
+            ShaHash, AverageHash, DifferenceHash, PerceptualHash, verbose
+        };
+		command5.SetHandler((ShaHash, AverageHash, DifferenceHash, PerceptualHash, verbose) => 
+            { HelperLib.CalculateHashes(ShaHash, AverageHash, DifferenceHash, PerceptualHash, verbose);},
+            ShaHash, AverageHash, DifferenceHash, PerceptualHash, verbose);
 		rootCommand.AddCommand(command5);
 		#endregion
 
-
+        
 		// Command6 - CheckSumDups insert or update based on hash from CheckSum
 		#region "subcommand6 CheckSumDupsBasedOn - insert or update CheckSumDupsBasedOn based on 1 of the hashes from CheckSum"
 		Command command6 = new ("FindDupsUsingHash", "CheckSumDupsBasedOn - insert or update CheckSumDupsBasedOn based on hash from CheckSum.")
 		{
-			new Option<string>("--hash", "Hash to use: SHA, average, difference, perceptual.").FromAmong("Sha", "Average", "Difference", "Perceptual"),
-			new Option<bool>("--verbose", getDefaultValue: () => false, "Verbose logging.")
+			Hash, verbose
 		};
-		command6.Handler = CommandHandler.Create((string hash, bool verbose) => {svcHelperLib.FindDupsUsingHash(hash, verbose); });
+		command6.SetHandler((Hash, verbose) => {svcHelperLib.FindDupsUsingHash(Hash, verbose);}, Hash, verbose);
 		rootCommand.AddCommand(command6);
 		#endregion
 
@@ -125,10 +127,9 @@ internal class Program
 		#region "subcommand7 PerceptualHash_Move2Hdrive
 		Command command7 = new("PerceptualHash_Move2Hdrive", "PerceptualHash_Move2Hdrive")
 		{
-			new Option<bool>("--verbose", getDefaultValue: () =>false, "Verbose logging.")
-				.AddSuggestions("true","false")
+			verbose
 		};
-		command7.Handler = CommandHandler.Create((bool verbose) => { HelperLib.PerceptualHash_Move2Hdrive(verbose); });
+		command7.SetHandler((verbose) => { HelperLib.PerceptualHash_Move2Hdrive(verbose);}, verbose);
 		rootCommand.AddCommand(command7);
         #endregion
 
@@ -136,22 +137,25 @@ internal class Program
         #region "subcommand8 Training CSV
         Command command8 = new("TrainingCSV", "Create a CSV file of SHA hashes where duplicate count is 2. This is to create a training CSV file for the ML.NET model")
         {
-            new Option<bool>("--verbose", getDefaultValue: () =>false, "Verbose logging.")
-                .AddSuggestions("true","false")
+            verbose                
         };
-        command8.Handler = CommandHandler.Create((bool verbose) => { HelperLib.TrainingCSV(verbose); });
+        command8.SetHandler((verbose) => { HelperLib.TrainingCSV(verbose); }, verbose);
         rootCommand.AddCommand(command8);
         #endregion
 
+        // Command9 - Read a CSV file of SHA hashes where duplicate count is 2 and delete the CheckSum based on the ToDelete column.
+        #region "subcommand9 Read a CSV file of SHA hashes where duplicate count is 2 and delete the CheckSum based on the ToDelete column.
+        Command command9 = new("ShaDelete", "Read a CSV file of SHA hashes where duplicate count is 2 and delete the CheckSum based on the ToDelete column.")
+        {
+            verbose, CSVfile
+        };
+        command9.SetHandler((verbose, CSVfile) => { HelperLib.ShaDelete(verbose, CSVfile); }, verbose, CSVfile);
+        rootCommand.AddCommand(command9);
+        #endregion
 
-   //     // set up common functionality like --help, --version, and dotnet-suggest support
-   //     var commandLine = new CommandLineBuilder(rootCommand)
-			//.UseDefaults() // automatically configures dotnet-suggest
-			//.Build();
-
-		// call the method defined in the handler
-		try
-		{
+        // call the method defined in the handler
+        try
+        {
 			return rootCommand.InvokeAsync(args).Result;
 		}
 		catch (Exception exc)
@@ -161,6 +165,7 @@ internal class Program
 		finally
 		{
             Log.Information( "Finished");
+            Log.CloseAndFlush();
         }
 		return 0;
     }	// end of method Main
@@ -204,7 +209,7 @@ internal class Program
                 Database:               {CnStr.InitialCatalog.ToUpper()}
                 OneDrivePhotos:         {OneDrivePhotos}
                 OneDriveVideos:         {OneDriveVideos}
-        {new String('-', 122)}
+        {new String('-', 113)}
         """);
     }
 }
