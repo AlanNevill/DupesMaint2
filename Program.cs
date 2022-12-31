@@ -153,6 +153,17 @@ internal class Program
         rootCommand.AddCommand(command9);
         #endregion
 
+        // Command10 - Create a CSV file of perceptual hashes where duplicate count is 2.
+        #region "subcommand10 PerceptualHashCSV
+        Command command10 = new("PerceptualHashCSV", "Create a CSV file of perceptual hashes where duplicate count is 2.")
+        {
+            verbose
+        };
+        command10.SetHandler((verbose) => { HelperLib.PerceptualHashCSV(verbose); }, verbose);
+        rootCommand.AddCommand(command10);
+        #endregion
+
+
         // call the method defined in the handler
         try
         {
@@ -209,7 +220,7 @@ internal class Program
                 Database:               {CnStr.InitialCatalog.ToUpper()}
                 OneDrivePhotos:         {OneDrivePhotos}
                 OneDriveVideos:         {OneDriveVideos}
-        {new String('-', 113)}
+        {new String('-', 130)}
         """);
     }
 }

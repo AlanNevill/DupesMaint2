@@ -44,10 +44,16 @@ using System.Threading.Tasks;
 using System.Threading;
 using DirectoryList = System.Collections.Generic.IReadOnlyList<MetadataExtractor.Directory>;
 using CoenM.ImageHash;
+using Microsoft.Extensions.Hosting;
+using static System.Net.WebRequestMethods;
+using File = System.IO.File;
+using System.Text.RegularExpressions;
+using System.Security.Policy;
+using System.Diagnostics;
 
 namespace DupesMaint2;
 
-public sealed class HelperLib
+public partial class HelperLib
 {
 	private static IConfiguration? _config;
 
@@ -222,9 +228,10 @@ public sealed class HelperLib
 			verbose:		{verbose}
 		""");
 
+		// load all the CheckSum rows
 		List<CheckSum> checkSums = photosCtx!.CheckSum.ToList();
 
-        Log.Information($"CalculateHashes - Starting Parallel.ForEach, checkSums.Count: {checkSums.Count:N0}");
+        Log.Information($"CalculateHashes - Starting Parallel.ForEach, allCheckSums.Count: {checkSums.Count:N0}");
             
 		var parallel = Parallel.ForEach(checkSums, checkSum =>
 		{
@@ -247,13 +254,12 @@ public sealed class HelperLib
 				}
 
                 // type can have hashes calculated
-                FileInfo fileInfo = new(checkSum.FileFullName!);
+                string fileFullName = Environment.MachineName == "WILLBOT" ? checkSum.FileFullName.Replace("\\User\\", "\\Pops\\") : checkSum.FileFullName;
+                FileInfo fileInfo = new(fileFullName);
 
-				// calculate the Sha theHash
+				// calculate the Sha hash
 				if (ShaHash && checkSum.Sha is null)
-				{
 					checkSum.Sha = calcShaHash2(fileInfo);
-				}
 
 				// image processor seems to have a limit on file size
 				if (fileInfo.Length > 71_000_000)
@@ -282,20 +288,20 @@ public sealed class HelperLib
 			{
 				checkSum.MediaFileType = "Unknown";
 				checkSum.FormatValid = "N";
-				Log.Fatal(exc, $"CalculateHashes - id: {checkSum.Id}\n{new String('-', 150)}\n");
+				Log.Fatal(exc, $"CalculateHashes - id: {checkSum.Id}\n{new String('-', 132)}\n");
 			}
 			catch (SixLabors.ImageSharp.InvalidImageContentException iIcE)
 			{
 				checkSum.FormatValid = "N";
-				Log.Fatal(iIcE,$"CalculateHashes - id: {checkSum.Id}\n{new String('-', 150)}\n");
+				Log.Fatal(iIcE,$"CalculateHashes - id: {checkSum.Id}\n{new String('-', 132)}\n");
 			}
 			catch (FileNotFoundException fnfEx)
 			{
-				Log.Fatal(fnfEx,$"CalculateHashes - id: {checkSum.Id}\n{new String('-', 150)}\n");
+				Log.Fatal(fnfEx,$"CalculateHashes - id: {checkSum.Id}\n{new String('-', 132)}\n");
 			}
 			catch (Exception ex)
 			{
-				Log.Fatal(ex,$"CalculateHashes - id: {checkSum.Id}\n{new String('-', 150)}\n");
+				Log.Fatal(ex,$"CalculateHashes - id: {checkSum.Id}\n{new String('-', 132)}\n");
 			}
 
 			if (verbose) Log.Information($"CalculateHashes - id: {checkSum.Id}, checkSum.AverageHash: {checkSum.AverageHash}, checkSum.DifferenceHash: {checkSum.DifferenceHash}, checkSum.PerceptualHash: {checkSum.PerceptualHash}.");
@@ -310,7 +316,6 @@ public sealed class HelperLib
 
 		}); // end of Parallel.ForEach
 
-
         // update the database
         photosCtx!.SaveChanges();
 
@@ -319,11 +324,11 @@ public sealed class HelperLib
         Log.Information($"""
 		CalculateHashes - Finished processing
 				parallel.ToString:	{parallel}
-				checkSums.Count:	{photosCtx.CheckSum.LongCount():N0}
+				allCheckSums.Count:	{photosCtx.CheckSum.LongCount():N0}
 				processedCount:		{processedCount:N0}
 				dropCount:			{dropCount:N0}
 				execution time:		{_stopwatch.Elapsed.TotalMinutes:N1} mins
-		{new String('-', 135)}
+		{new String('-', 132)}
 		""");
 
 
@@ -332,24 +337,23 @@ public sealed class HelperLib
         ////////////////
         ulong calcAverageHash(FileInfo fileInfo)
         {
-
             var averageHash = new CoenM.ImageHash.HashAlgorithms.AverageHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
                                                                                    //using var stream = File.OpenRead(fileInfo.FullName);
-            return averageHash.Hash(File.OpenRead(fileInfo.FullName));
+            return averageHash.Hash(System.IO.File.OpenRead(fileInfo.FullName));
         }
 
         ulong calcDifferenceHash(FileInfo fileInfo)
         {
             var differenceHash = new CoenM.ImageHash.HashAlgorithms.DifferenceHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
                                                                                          //using var stream = File.OpenRead(fileInfo.FullName);
-            return differenceHash.Hash(File.OpenRead(fileInfo.FullName));
+            return differenceHash.Hash(System.IO.File.OpenRead(fileInfo.FullName));
         }
 
         ulong calcPerceptualHash(FileInfo fileInfo)
         {
             var perceptualHash = new CoenM.ImageHash.HashAlgorithms.PerceptualHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
                                                                                          //using var stream = File.OpenRead(fileInfo.FullName);
-            return perceptualHash.Hash(File.OpenRead(fileInfo.FullName));
+            return perceptualHash.Hash(System.IO.File.OpenRead(fileInfo.FullName));
         }
 
     }
@@ -398,7 +402,7 @@ public sealed class HelperLib
 			continue;
 
 			int maxSize = checkSums.Max(y => (int)y.FileSize!);
-			Log.Information($"perceptualHash.Key: {perceptualHash.Key}, checkSums.Count: {checkSums.Count}, maxSize: {maxSize:N0}");
+			Log.Information($"perceptualHash.Key: {perceptualHash.Key}, allCheckSums.Count: {checkSums.Count}, maxSize: {maxSize:N0}");
 
                 foreach (var checkSum in checkSums.OrderByDescending(v => v.FileSize))
                 {
@@ -1097,6 +1101,132 @@ public sealed class HelperLib
         Log.Information($"TrainingCSV - Finished writing CSV file: {csvFile}");
     }
 
+    internal static void PerceptualHashCSV(bool verbose)
+    {
+		Stopwatch stopwatch = Stopwatch.StartNew();
+		int perceptualHashCount = 0;
+		var (Year, Month, Day, Ticks) = (DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, DateTime.Now.Ticks);
+		
+        // Open a CSV file for writing
+        string csvFile = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "DupesMaint2", $"PerceptualHashCSV-{Month}-{Day}-{Ticks}.csv");
+		
+        Log.Information($"PerceptualHashCSV - Writing CSV file: {csvFile}");
+
+        // read all CheckSum into a list in memory
+        List<CheckSum> allCheckSums = photosCtx!.CheckSum.ToList();
+        Log.Information($"PerceptualHashCSV - read all CheckSum into a list: {allCheckSums.Count:N0}, {stopwatch.ElapsedMilliseconds:N0} ms");
+
+        using (StreamWriter sw = new (csvFile))
+        {
+            // Write the header
+            sw.WriteLine("HashValue,CheckSumId1,Filename1,CheckSumId2,Filename2,Action");
+
+            // Get a list of perceptual hashes where count(*) = 2
+            var query = from p in photosCtx!.Set<CheckSum>()
+                        group p by p.PerceptualHash
+						into g
+                        where g.Count() == 2
+                        select new { g.Key };
+
+			if (query is null)
+			{
+				Log.Fatal($"PerceptualHashCSV - query is null");
+				return;
+			}
+			
+            // Loop through the duplicate perceptualHash values getting the 2 CheckSum rows
+            foreach (var PerceptualHash in query)
+            {
+                perceptualHashCount++;
+
+                // Get the CheckSum rows for the PerceptualHash.Key value from the list of allCheckSums in memory
+                List<CheckSum> checkSums = allCheckSums.Where(a => a.PerceptualHash == PerceptualHash.Key).ToList();
+                //List<CheckSum> checkSums = photosCtx!.CheckSum.Where(a => a.PerceptualHash == PerceptualHash.Key).ToList();
+
+                // this should return a list of 2 CheckSum rows
+                if (checkSums.Count != 2)
+                {
+                    Log.Fatal($"PerceptualHashCSV - CheckSums count is {checkSums.Count} should be 2, PerceptualHash {PerceptualHash.Key}");
+                    return;
+                }
+
+                // Get the Id and FileFullName for each CheckSum row
+                int checkSumId1 = checkSums[0].Id;
+                string filename1 = checkSums[0].FileFullName;
+                int checkSumId2 = checkSums[1].Id;
+                string filename2 = checkSums[1].FileFullName;
+
+				if (filename1.Contains("edited") && !filename2.Contains("edited"))
+                    sw.WriteLine($"{PerceptualHash.Key},{checkSumId1},{filename1},{checkSumId2},{filename2},1");
+
+                if (!filename1.Contains("edited") && filename2.Contains("edited"))
+                    sw.WriteLine($"{PerceptualHash.Key},{checkSumId1},{filename1},{checkSumId2},{filename2},2");
+				
+                if (filename1.Contains("edited") && filename2.Contains("edited"))
+                {
+                    int one = Version_get(filename1); int two = Version_get(filename2);
+					
+					if (one == 0 && two == 0)
+					{
+						sw.WriteLine($"{PerceptualHash.Key},{checkSumId1},{filename1},{checkSumId2},{filename2},Both");
+						continue;
+					}
+					
+                    if ( one >= two)
+                        sw.WriteLine($"{PerceptualHash.Key},{checkSumId1},{filename1},{checkSumId2},{filename2},3");
+                    else
+                        sw.WriteLine($"{PerceptualHash.Key},{checkSumId1},{filename1},{checkSumId2},{filename2},4");
+                }
+
+                if (!filename1.Contains("edited") && !filename2.Contains("edited"))
+				{
+                    int one = Version_get(filename1); int two = Version_get(filename2);
+
+                    if (one == 0 && two == 0)
+                    {
+                        sw.WriteLine($"{PerceptualHash.Key},{checkSumId1},{filename1},{checkSumId2},{filename2},Neither");
+                        continue;
+                    }
+					
+                    if (one >= two)						
+                        sw.WriteLine($"{PerceptualHash.Key},{checkSumId1},{filename1},{checkSumId2},{filename2},5");
+                    else
+                        sw.WriteLine($"{PerceptualHash.Key},{checkSumId1},{filename1},{checkSumId2},{filename2},6");
+                }
+
+                if (verbose && perceptualHashCount % 1000 == 0)
+                    Log.Information($"PerceptualHashCSV.Foreach - {perceptualHashCount,6:N0}, {stopwatch.ElapsedMilliseconds:N0} ms");
+            }
+        }
+        stopwatch.Stop();
+        Log.Information($"""
+			PerceptualHashCSV - Finished writing 
+				CSV file: {csvFile}
+				perceptualHashCount: {perceptualHashCount:N0}
+				{stopwatch.ElapsedMilliseconds:N0} ms
+			""");
+
+        /// local function	
+        /// return a integer from a regex1 file name string in the format (d) e.g. C:\Users\User\OneDrive\Photos\2013\05\DSC00359(1).JPG
+        static int Version_get(string filename)
+		{
+            try // catches any int.parse errors
+			{
+                MatchCollection mc = regex1().Matches(filename);
+				return mc.Count == 0 ? 0 : int.Parse(mc[0].Value.Replace('(',' ').Replace(')',' '));
+			}
+			catch (Exception exc)
+			{
+                Log.Fatal(exc, $"Version_get - {filename}");
+                throw;
+			}
+        }
+    }
+
+    [GeneratedRegex(@"\(\d\)", RegexOptions.IgnoreCase, "en-US")]
+    internal static partial Regex regex1();
+
+	
     /// <summary>
     /// Command 9 Read a CSV file of SHA hashes where duplicate count is 2 and delete the CheckSum based on the ToDelete column.
     /// </summary>

@@ -1,9 +1,4 @@
-﻿using System;
-using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Metadata;
-using Microsoft.Data.SqlClient;
-using Microsoft.Extensions.Configuration;
-using DupesMaint2.Models;
+﻿using Microsoft.EntityFrameworkCore;
 
 namespace DupesMaint2.Models
 {
