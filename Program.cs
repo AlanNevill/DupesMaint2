@@ -1,14 +1,12 @@
 ﻿using DupesMaint2.Models;
+using Microsoft.Data.SqlClient;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Serilog;
 using System.CommandLine;
-//using System.CommandLine.Builder;
-using System.CommandLine.Invocation;
 using System.CommandLine.Parsing;
-using Microsoft.Data.SqlClient;
-using Microsoft.EntityFrameworkCore;
 
 namespace DupesMaint2;
 
@@ -100,7 +98,7 @@ internal class Program
 		#endregion
 
 
-		// Command5 - calculate and store up to 3 percuptual hashes and SHA256 in the CheckSum table
+		// Command5 - calculate and store up to 3 hashes and the SHA256 hash in the CheckSum table
 		#region "subcommand5 CalculateHashes - Calculate hashes and store in CheckSum"
 		Command command5 = new ("CalculateHashes", "Calculate and store hashes in the CheckSum table.")
 		{
