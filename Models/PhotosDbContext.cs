@@ -8,8 +8,7 @@ namespace DupesMaint2.Models
         {
         }
 
-        public PhotosDbContext(DbContextOptions<PhotosDbContext> options)
-            : base(options)
+        public PhotosDbContext(DbContextOptions<PhotosDbContext> options) : base(options)
         {}
 
         public virtual DbSet<CheckSum> CheckSum { get; set; }
