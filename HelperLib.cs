@@ -1,6 +1,8 @@
-﻿using CoenM.ImageHash;
+﻿//using CoenM.ImageHash;
 
 using Dapper;
+
+using Drastic.ImageHash;
 
 using DupesMaint2.Models;
 
@@ -331,22 +333,22 @@ public partial class HelperLib
         ////////////////
         ulong calcAverageHash(FileInfo fileInfo)
         {
-            var averageHash = new CoenM.ImageHash.HashAlgorithms.AverageHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
-                                                                                   //using var stream = File.OpenRead(fileInfo.FullName);
+            var averageHash = new Drastic.ImageHash.HashAlgorithms.AverageHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
+                                                                                     //using var stream = File.OpenRead(fileInfo.FullName);
             return averageHash.Hash( System.IO.File.OpenRead( fileInfo.FullName ) );
         }
 
         ulong calcDifferenceHash(FileInfo fileInfo)
         {
-            var differenceHash = new CoenM.ImageHash.HashAlgorithms.DifferenceHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
-                                                                                         //using var stream = File.OpenRead(fileInfo.FullName);
+            var differenceHash = new Drastic.ImageHash.HashAlgorithms.DifferenceHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
+                                                                                           //using var stream = File.OpenRead(fileInfo.FullName);
             return differenceHash.Hash( System.IO.File.OpenRead( fileInfo.FullName ) );
         }
 
         ulong calcPerceptualHash(FileInfo fileInfo)
         {
-            var perceptualHash = new CoenM.ImageHash.HashAlgorithms.PerceptualHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
-                                                                                         //using var stream = File.OpenRead(fileInfo.FullName);
+            var perceptualHash = new Drastic.ImageHash.HashAlgorithms.PerceptualHash();    // instaniate the CoenM.ImageHash.HashAlgorithms;
+                                                                                           //using var stream = File.OpenRead(fileInfo.FullName);
             return perceptualHash.Hash( System.IO.File.OpenRead( fileInfo.FullName ) );
         }
 
