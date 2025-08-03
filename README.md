@@ -99,15 +99,15 @@ Calculate and store up to 4 hashes in the CheckSum table for photos only.
 
 Claculate the SHA 256 value for the column.
 
-### --averageHash        true/<u>false</u>
+### --AverageHash        true/<u>false</u>
 
 Calculate the AverageHash column.
 
-### --differenceHash    true/<u>false</u>
+### --DifferenceHash    true/<u>false</u>
 
 Calculate the DifferenceHash column.
 
-### --perceptualHash    true/<u>false</u>
+### --PerceptualHash    true/<u>false</u>
 
 Calculate the PerceptualHash column.
 

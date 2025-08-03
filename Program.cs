@@ -23,6 +23,7 @@ internal class Program
 
     private static int Main(string[] args)
     {
+        // set up the configuration
         BuildConfig();
 
         // dependency injection
@@ -46,11 +47,11 @@ internal class Program
         // Uses System.CommandLine beta library
         // see https://github.com/dotnet/command-line-api/wiki/Your-first-app-with-System.CommandLine
 
-        // define command options
+        // define all command options
         var folder = new Option<DirectoryInfo>( "--folder", "The root folder of the tree to scan which must exist, 'F:/Picasa backup/c/photos'." ).ExistingOnly();
         var mediaType = new Option<string>( "--mediaType", "File media type to load, Photo or Video." ).FromAmong( "Photo", "Video" );
         var replace = new Option<bool>( "--replace", getDefaultValue: () => false, "Replace default (true) or append (false) to the db tables CheckSum & CheckSumDupes." ) { IsRequired = false };
-        var verbose = new Option<bool>( "--verbose", getDefaultValue: () => false, "Verbose logging." ) { IsRequired = false };
+        var verbose = new Option<bool>( "--verbose", getDefaultValue: () => false, "Verbose logging. Default false" ) { IsRequired = false };
         var image = new Option<FileInfo>( "--image", "An image file, 'C:\\Users\\User\\OneDrive\\Photos\\2013\\02\\2013-02-24 12.34.54-3.jpg'" ).ExistingOnly();
         var ShaHash = new Option<bool>( "--ShaHash", getDefaultValue: () => false, "Calculate the ShaHash." ) { IsRequired = true };
         var AverageHash = new Option<bool>( "--AverageHash", getDefaultValue: () => false, "Calculate the AverageHash." ) { IsRequired = true };
@@ -110,6 +111,7 @@ internal class Program
         command5.SetHandler( (ShaHash, AverageHash, DifferenceHash, PerceptualHash, verbose) =>
             { HelperLib.CalculateHashes( ShaHash, AverageHash, DifferenceHash, PerceptualHash, verbose ); },
             ShaHash, AverageHash, DifferenceHash, PerceptualHash, verbose );
+
         rootCommand.AddCommand( command5 );
         #endregion
 
@@ -204,15 +206,22 @@ internal class Program
                 OneDriveVideos = _config["Willbot_OneDriveVideos"]!;
                 //Log.Information( "Dupesmaint2.Program - Willbot" );
                 break;
+
             case "SNOWBALL":
                 _cnStr = _config.GetConnectionString( "SNOWBALL_Photos" )!;
                 OneDrivePhotos = _config["Snowball_OneDrivePhotos"]!;
                 OneDriveVideos = _config["Snowball_OneDriveVideos"]!;
                 //Log.Information( "DupesMaint2.Program - Snowball" );
                 break;
+
+            case "BEELINK-1":
+                _cnStr = _config.GetConnectionString( "BEELINK-1_Photos" )!;
+                OneDrivePhotos = _config["OneDriveFolders:BEELINK-1:Photos"]!;
+                OneDriveVideos = _config["OneDriveFolders:BEELINK-1:Videos"]!;
+                break;
+
             default:
                 throw new NotImplementedException( $"Machine name {Environment.MachineName.ToUpper()} not recognised" );
-                break;
         }
         //if (Environment.MachineName.ToUpper() == "WILLBOT")
         //{

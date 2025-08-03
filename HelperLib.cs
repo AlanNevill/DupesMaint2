@@ -107,8 +107,11 @@ public partial class HelperLib
         new FileExtensionTypes { Type = ".MOV", Group = "Video" },
         new FileExtensionTypes { Type = ".MTS", Group = "Video" },
         new FileExtensionTypes { Type = ".TIFF", Group = "Photo"},
+        new FileExtensionTypes { Type = ".TIF", Group = "Photo"},
         new FileExtensionTypes { Type = ".WMV", Group = "Video" },
         new FileExtensionTypes { Type = ".Webp", Group = "Photo"},
+        new FileExtensionTypes { Type = ".WEBP", Group = "Photo"},
+
         };
 
 
@@ -178,9 +181,7 @@ public partial class HelperLib
                 TheFileName = fileInfo.Name,
                 FileExt = fileInfo.Extension.ToUpper(),
                 FileSize = (int)fileInfo.Length,
-                FileCreateDt = fileInfo.CreationTime,
                 MediaFileType = fileType,
-                TimerMs = 0,
             };
 
             photosCtx.Add( checkSum );
@@ -250,8 +251,8 @@ public partial class HelperLib
                 }
 
                 // type can have hashes calculated
-                string fileFullName = Environment.MachineName == "WILLBOT" ? checkSum.FileFullName.Replace( "\\User\\", "\\Pops\\" ) : checkSum.FileFullName;
-                FileInfo fileInfo = new( fileFullName );
+                //string fileFullName = Environment.MachineName == "WILLBOT" ? checkSum.FileFullName.Replace( "\\User\\", "\\Pops\\" ) : checkSum.FileFullName;
+                FileInfo fileInfo = new( checkSum.FileFullName );
 
                 // calculate the Sha hash
                 if ( ShaHash && checkSum.Sha is null )
@@ -265,16 +266,19 @@ public partial class HelperLib
                     return;
                 }
 
+                // calculate the average hash
                 if ( averageHash && checkSum.AverageHash is null )
                 {
                     checkSum.AverageHash = calcAverageHash( fileInfo );
                 }
 
+                // calculate the difference hash
                 if ( differenceHash && checkSum.DifferenceHash is null )
                 {
                     checkSum.DifferenceHash = calcDifferenceHash( fileInfo );
                 }
 
+                // calculate the perceptual hash
                 if ( perceptualHash && checkSum.PerceptualHash is null )
                 {
                     checkSum.PerceptualHash = calcPerceptualHash( fileInfo );
@@ -451,8 +455,8 @@ public partial class HelperLib
     /// ONLY WORKS FOR ShaHash & PerceptualHash
     /// Command6 - FindDupsUsingHash
     /// </summary>
-    /// <param name="hashType"></param>
-    /// <param name="verbose"></param>
+    /// <param name="hashType">string</param>
+    /// <param name="verbose">bool</param>
     public void FindDupsUsingHash(string hashType, bool verbose)
     {
         System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
@@ -538,10 +542,10 @@ public partial class HelperLib
         _stopwatch.Stop();
         Log.Information( $"""
 		FindDupsUsingHash - Finished
-			hashType:							{hashType}
+			hashType:						{hashType}
 			insertCheckSumDupsBasedOnCount: {insertCheckSumDupsBasedOnCount:N0}
 			execution time:					{_stopwatch.Elapsed.TotalMinutes:N1} mins.
-		{new String( '=', 135 )}
+		{new String( '=', 130 )}
 		""" );
 
         //////////////////////////////
@@ -567,89 +571,6 @@ public partial class HelperLib
     }
 
 
-    private static void CheckSumDupsBasedOn_upsert(CheckSumDupsBasedOn checkSumDupsBasedOn, bool verbose, ref int insertCheckSumDupsCount, ref int updateCheckSumDupsBasedOnCount, ref int insertCheckSumDupsBasedOnCount)
-    {
-        //PopsDbContext photosDbContext = new ();
-
-        //// check if a CheckSumDups row exists for this CheckSumId and theHash values
-        //var checkSumDupPlusBasedOn = photosDbContext.CheckSumDups
-        //								.Where(e => e.ChecksumId == checkSumDupsBasedOn.CheckSumId)
-        //								.Select(e => new
-        //								{
-        //									e.Id,
-        //									CheckSumDupsBasedOn = e.CheckSumDupsBasedOn.Select(b => new
-        //									{
-        //										b.CheckSumId,
-        //										b.DupBasedOn,
-        //										b.BasedOnVal
-        //									})
-        //								})
-        //								.FirstOrDefault();
-
-
-        //if (checkSumDupPlusBasedOn is null)    // need to insert a new CheckSumDups row and its child row CheckSumDupsBasedOn
-        //{
-        //              CheckSumDups checkSumDup1 = new()
-        //              {
-        //                  ChecksumId = checkSumDupsBasedOn.CheckSumId
-        //              };
-
-        //	// add the child row - CheckSumDupsBasedOn
-        //	checkSumDup1.CheckSumDupsBasedOn.Add(
-        //                  new CheckSumDupsBasedOn
-        //                  {
-        //                      CheckSumId = checkSumDup1.ChecksumId,
-        //                      DupBasedOn = checkSumDupsBasedOn.DupBasedOn,
-        //                      BasedOnVal = checkSumDupsBasedOn.BasedOnVal
-        //                  });
-
-        //	// save the parent ChecSumDup and child CheckSumDupsBasedOn
-        //	photosDbContext.Add(checkSumDup1);
-
-        //	insertCheckSumDupsCount++;
-
-        //	if (verbose)
-        //              {
-        //                  Log.Information($"FindDupsUsingHash - Added new CheckSumDup and CheckSumDupsBasedOn rows, checkSum.Id: {checkSumDup1.ChecksumId}, theHash: {checkSumDupsBasedOn.DupBasedOn}.");
-        //              }
-        //          }
-        //          else     // just add the new CheckSumDupsBasedOn row for this CheckSumDup. Delete any existing value first.
-        //          {
-        //	// Get the existing CheckSumDups row
-        //	CheckSumDups checkSumDups = photosDbContext.CheckSumDups.Where(e => e.Id == checkSumDupPlusBasedOn.Id).FirstOrDefault();
-
-        //	// Get the CheckSumDupsBasedOn row for this CheckSumDup and theHash
-        //	CheckSumDupsBasedOn checkSumDupsBasedOn1 = photosDbContext.CheckSumDupsBasedOn.Where(c => c.CheckSumId == checkSumDups.ChecksumId && c.DupBasedOn == checkSumDupsBasedOn.DupBasedOn).FirstOrDefault();
-        //              if (checkSumDupsBasedOn1 is not null)
-        //              {
-        //		checkSumDupsBasedOn1.BasedOnVal = checkSumDupsBasedOn.BasedOnVal;
-
-        //		if (verbose)
-        //			Log.Information($"FindDupsUsingHash - Existing CheckSumDup, checkSum.Id: {checkSumDups.ChecksumId}, Updated CheckSumDupsBasedOn row with checkSum.Id: {checkSumDupsBasedOn1.CheckSumId}, " +
-        //				$"theHash: {checkSumDupsBasedOn.DupBasedOn}, checkSumDupsBasedOn1.BasedOnVal: {checkSumDupsBasedOn1.BasedOnVal}.");
-        //	}
-        //	else
-        //              {
-        //		checkSumDups.CheckSumDupsBasedOn.Add(
-        //			new CheckSumDupsBasedOn
-        //			{
-        //				CheckSumId = checkSumDupsBasedOn.CheckSumId,
-        //				DupBasedOn = checkSumDupsBasedOn.DupBasedOn,
-        //				BasedOnVal = checkSumDupsBasedOn.BasedOnVal
-        //			});
-
-        //		photosDbContext.Update(checkSumDups);
-        //		updateCheckSumDupsBasedOnCount++;
-
-        //		if (verbose)
-        //			Log.Information($"FindDupsUsingHash - Existing CheckSumDup, checkSum.Id: {checkSumDups.ChecksumId}, added CheckSumDupsBasedOn row with checkSum.Id: {checkSumDups.ChecksumId}, " +
-        //				$"theHash: {checkSumDupsBasedOn.DupBasedOn}, checkSumDupsBasedOn.BasedOnVal: {checkSumDupsBasedOn.BasedOnVal}.");
-        //	}
-
-        //}
-
-        //photosDbContext.SaveChanges();
-    }
 
     /// <summary>
     /// Command2 - LoadFileType all the files in the folder tree passed in and add rows to CheckSum table
@@ -683,13 +604,11 @@ public partial class HelperLib
                 TheFileName = fi.Name,
                 FileExt = fi.Extension,
                 FileSize = (int)fi.Length,
-                FileCreateDt = fi.CreationTime,
                 CreateDateTime = _CreateDateTime
             };
 
             // insert into DB table
             HelperLib.CheckSum_ins2( checkSum );
-
 
             _count++;
 
@@ -718,7 +637,7 @@ public partial class HelperLib
                 Log.Information( $"[{_directory.Name}]\t - [{tag.Name}] = [{tag.Description}]" );
             }
         }
-        Serilog.Log.Information( $"ProcessAnEXIF - Finished: {image.FullName}\n{new String( '-', 150 )}" );
+        Log.Information( $"ProcessAnEXIF - Finished: {image.FullName}\n{new String( '-', 150 )}" );
     }
 
 
@@ -870,8 +789,6 @@ public partial class HelperLib
         p.Add( "@TheFileName", checkSum.TheFileName );
         p.Add( "@FileExt", checkSum.FileExt );
         p.Add( "@FileSize", checkSum.FileSize );
-        p.Add( "@FileCreateDt", checkSum.FileCreateDt );
-        p.Add( "@TimerMs", checkSum.TimerMs );
         p.Add( "@Notes", "" );
 
         // call the stored procedure
@@ -888,8 +805,6 @@ public partial class HelperLib
         p.Add( "@TheFileName", checkSum.TheFileName );
         p.Add( "@FileExt", checkSum.FileExt );
         p.Add( "@FileSize", checkSum.FileSize );
-        p.Add( "@FileCreateDt", checkSum.FileCreateDt );
-        p.Add( "@TimerMs", checkSum.TimerMs );
         p.Add( "@Notes", "" );
         p.Add( "@CreateDateTime", checkSum.CreateDateTime );
 
@@ -1248,19 +1163,16 @@ public partial class HelperLib
                 if ( checkSum is null )
                 {
                     Log.Fatal( $"ShaDelete - CheckSumId {checkSumId} not found" );
-                    return;
+                    continue;
                 }
 
-                // Format the file name depending on which machine is running the code
-                string fileFullName = Environment.MachineName == "WILLBOT" ? checkSum.FileFullName.Replace( "\\User\\", "\\Pops\\" ) : checkSum.FileFullName;
-
                 // Delete the file
-                if ( verbose ) Log.Information( $"ShaDelete - Deleting, CheckSum id: {checkSum.Id}: fileFullName: {fileFullName}" );
-                File.Delete( fileFullName );
+                File.Delete( checkSum.FileFullName );
 
                 // Delete the CheckSum row
                 photosCtx.CheckSum.Remove( checkSum );
-                photosCtx.SaveChanges();
+
+                if ( verbose ) Log.Information( $"ShaDelete - Deleting, CheckSum id: {checkSum.Id}: checkSum.FileFullName: {checkSum.FileFullName}" );
             }
             else  // bad line
             {
@@ -1268,6 +1180,9 @@ public partial class HelperLib
                 return;
             }
         }
+
+        // Save the changes
+        photosCtx!.SaveChanges();
         Log.Information( $"ShaDelete - Finished, lines.Count: {lines.Count:N0}" );
     }
 }
