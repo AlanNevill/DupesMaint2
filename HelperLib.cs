@@ -737,26 +737,25 @@ public partial class HelperLib
             }
             photosCtx!.SaveChanges();
         }
+    }
 
-        // get the EXIF TagDateTimeOriginal date from the photo's EXIF data
-        string CreateDate_Extract(string fileFullName)
+    private static string CreateDate_Extract(string fileFullName)
+    {
+        var directories = GetMetadata( fileFullName );
+        var _ExifSubIfdDirectory = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
+
+        if ( _ExifSubIfdDirectory is not null )
         {
-            var directories = GetMetadata( fileFullName );
-            var _ExifSubIfdDirectory = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
-
-            if ( _ExifSubIfdDirectory is not null )
+            string _sCreateDateTime = _ExifSubIfdDirectory.GetDescription( ExifSubIfdDirectory.TagDateTimeOriginal )!;
+            if ( !string.IsNullOrEmpty( _sCreateDateTime ) && !_sCreateDateTime.Equals( "0000:00:00 00:00:00" ) )
             {
-                string _sCreateDateTime = _ExifSubIfdDirectory.GetDescription( ExifSubIfdDirectory.TagDateTimeOriginal )!;
-                if ( !string.IsNullOrEmpty( _sCreateDateTime ) && !_sCreateDateTime.Equals( "0000:00:00 00:00:00" ) )
+                if ( _sCreateDateTime[0..10].IndexOf( ':' ) > -1 )
                 {
-                    if ( _sCreateDateTime[0..10].IndexOf( ':' ) > -1 )
-                    {
-                        return _sCreateDateTime[0..10].Replace( ':', '-' ) + _sCreateDateTime[10..];
-                    }
+                    return _sCreateDateTime[0..10].Replace( ':', '-' ) + _sCreateDateTime[10..];
                 }
             }
-            return string.Empty;
         }
+        return string.Empty;
     }
 
 
@@ -886,7 +885,11 @@ public partial class HelperLib
         throw new FileNotFoundException( fileInfo.FullName );
     }
 
-
+    /// <summary>
+    /// Get a list of metadata directories for the file passed in.
+    /// </summary>
+    /// <param name="filePath"></param>
+    /// <returns>List<MetadataExtractor.Directory></returns>
     public static DirectoryList GetMetadata(string filePath)
     {
         var directories = new List<MetadataExtractor.Directory>();
