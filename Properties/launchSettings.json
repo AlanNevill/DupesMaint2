@@ -2,7 +2,7 @@
   "profiles": {
     "DupesMaint2": {
       "commandName": "Project",
-      "commandLineArgs": "CalculateHashes --ShaHash true --PerceptualHash true"
+      "commandLineArgs": "CameraRoll_MoveNoDb --verbose true"
     }
   }
 }

@@ -32,15 +32,17 @@ using MetadataExtractor.Formats.Wav;
 using MetadataExtractor.Formats.WebP;
 using MetadataExtractor.Util;
 
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 
 using Serilog;
 
 using System.Data;
-using System.Data.SqlClient;
 using System.Diagnostics;
+using System.Globalization;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
@@ -64,7 +66,7 @@ public partial class HelperLib
         photosCtx = photosDbContext;
     }
 
-    // map file extensions to media group
+    // map file extensions mapped to media group
     static readonly List<FileExtensionTypes> _fileExtensionTypes = new()
     {
         new FileExtensionTypes { Type = ".3GP", Group = "Video" },
@@ -325,7 +327,7 @@ public partial class HelperLib
 		CalculateHashes - Finished processing
 				parallel.ToString:	{parallel}
 				allCheckSums.Count:	{photosCtx.CheckSum.LongCount():N0}
-				processedCount:		{processedCount:N0}
+				movedCount:		{processedCount:N0}
 				dropCount:			{dropCount:N0}
 				execution time:		{_stopwatch.Elapsed.TotalMinutes:N1} mins
 		{new String( '-', 132 )}
@@ -579,8 +581,10 @@ public partial class HelperLib
     /// <param name="replace">Bool - If True truncate the CheckSum table else add rows.</param>
     public static void ProcessEXIF(DirectoryInfo folder, bool replace)
     {
+        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+
         int _count = 0;
-        Serilog.Log.Information( $"ProcessEXIF: target folder is {folder.FullName}\tTruncate CheckSum is: {replace}." );
+        Log.Information( $"target folder is {folder.FullName}\tTruncate CheckSum is: {replace}." );
 
         if ( replace )
         {
@@ -594,7 +598,7 @@ public partial class HelperLib
         foreach ( FileInfo fi in _files )
         {
             // get the EXIF date/time 
-            (DateTime _CreateDateTime, string _sCreateDateTime) = HelperLib.ImageEXIF( fi );
+            DateTime? _CreateDateTime = HelperLib.ImageEXIF( fi );
 
             // instantiate a new CheckSum object for the file
             CheckSum checkSum = new()
@@ -650,20 +654,21 @@ public partial class HelperLib
     /// <param name="verbose">Verbose logging</param>
     public static void CameraRoll_Move(string mediaFileType, bool verbose)
     {
-        Serilog.Log.Information( $"CameraRoll_Move - Starting\n\tmediaFileType: {mediaFileType}\n\tverbose: {verbose}\n" );
-        System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+
+        Log.Information( $"Starting\n\tmediaFileType: {mediaFileType}\n\tverbose: {verbose}\n" );
+        Stopwatch _stopwatch = Stopwatch.StartNew();
 
         int processedCount = 0, dropCount = 0;
 
         // Get all the CheckSum rows where the folder is 'C:\Users\User\OneDrive\Pictures\Camera Roll' and the MediaFileType = parameter
-        List<CheckSum> checkSum = photosCtx!.CheckSum.Where( a => a.Folder == @"C:\Users\User\OneDrive\Pictures\Camera Roll" && a.MediaFileType == mediaFileType )
-                                    .ToList();
+        List<CheckSum> checkSum = [.. photosCtx!.CheckSum.Where( a => a.Folder == @"C:\Users\User\OneDrive\Pictures\Camera Roll" && a.MediaFileType == mediaFileType )];
         if ( checkSum.Count == 0 )
         {
-            Serilog.Log.Warning( $"CameraRoll_Move - Abort. No rows found for MediaFileType: {mediaFileType}\n{new String( '-', 150 )}\n" );
+            Log.Warning( $"Abort. No rows found for MediaFileType: {mediaFileType}\n{new String( '-', 150 )}\n" );
             return;
         }
-        Serilog.Log.Information( $"CameraRoll_Move - {checkSum.Count:N0} rows found." );
+        Log.Information( $"{checkSum.Count:N0} rows found." );
 
         switch ( mediaFileType )
         {
@@ -677,38 +682,41 @@ public partial class HelperLib
         }
 
         _stopwatch.Stop();
-        Log.Information( $"CameraRoll_Move- processedCount: {processedCount:N0}, dropCount: {dropCount:N0}" );
-        Log.Information( $"CameraRoll_Move- Total execution time: {_stopwatch.Elapsed.TotalSeconds} secs.\n{new String( '-', 150 )}\n" );
+        Log.Information( $"movedCount: {processedCount:N0}, dropCount: {dropCount:N0}" );
+        Log.Information( $"Total execution time: {_stopwatch.Elapsed.TotalSeconds} secs.\n{new String( '-', 150 )}\n" );
 
         ///////////////////
         //// local methods
         ///////////////////
         void Photos_Process()
         {
-            string _sCreateDateTime;
 
             foreach ( var row in checkSum )
             {
-                // get the EXIF date					
-                _sCreateDateTime = CreateDate_Extract( row.FileFullName );
-                if ( string.IsNullOrEmpty( _sCreateDateTime ) )
+                // get the file extension type from the fileExtensionTypes list
+                var type = _fileExtensionTypes.Find( e => e.Type == row.FileExt );
+                if ( type is null )
                 {
-                    Serilog.Log.Warning( $"CameraRoll_Move - No EXIF date for {row.Id}, {row.FileFullName}" );
                     dropCount++;
+                    Log.Warning( $"No fileExtensionTypes found for {row.Id}, {row.FileFullName}" );
                     continue;
                 }
-                if ( !DateTime.TryParse( _sCreateDateTime, out DateTime createDateTime ) )
+
+                // get the EXIF date					
+                DateTime? createDateTime = CreateDate_Extract( row.FileFullName, type );
+
+                if ( !createDateTime.HasValue )
                 {
-                    Serilog.Log.Warning( $"CameraRoll_Move - _sCreateDateTime: {_sCreateDateTime} - not valid date, row: {row.Id}" );
+                    Log.Warning( $"No EXIF date for {row.Id}, {row.FileFullName}" );
                     dropCount++;
                     continue;
                 }
 
                 // format the target folder
                 string targetFile = Path.Combine( @"C:\Users\User\OneDrive\Photos",
-                createDateTime.Year.ToString(),
-                createDateTime.Month.ToString( "00" ),
-                row.TheFileName );
+                                                    createDateTime.Value.Year.ToString(),
+                                                    createDateTime.Value.Month.ToString( "00" ),
+                                                    row.TheFileName );
 
                 FileInfo fileInfo = new( row.FileFullName );
 
@@ -718,20 +726,20 @@ public partial class HelperLib
 
                     // if the file was successfully moved then update the CheckSum row Folder column
                     row.Folder = Path.Combine( @"C:\Users\User\OneDrive\Photos",
-                                                createDateTime.Year.ToString(),
-                                                createDateTime.Month.ToString( "00" ) );
+                                                createDateTime.Value.Year.ToString(),
+                                                createDateTime.Value.Month.ToString( "00" ) );
                     processedCount++;
 
-                    if ( verbose ) Log.Information( $"CameraRoll_Move - file: {row.FileFullName} was moved to {targetFile}" );
+                    if ( verbose ) Log.Information( $"file: {row.FileFullName} was moved to {targetFile}" );
                 }
                 catch ( IOException ioEXC )
                 {
                     dropCount++;
-                    Log.Error( $"CameraRoll_Move - IO exception moving file id: {row.Id}, {row.FileFullName}\nto {targetFile}\n{ioEXC}\n" );
+                    Log.Error( $"IO exception moving file id: {row.Id}, {row.FileFullName}\nto {targetFile}\n{ioEXC}\n" );
                 }
                 catch ( Exception exc )
                 {
-                    Log.Error( $"CameraRoll_Move - Exception moving file id: {row.Id}, {row.FileFullName}\nto {targetFile}\n{exc}\n" );
+                    Log.Error( $"Exception moving file id: {row.Id}, {row.FileFullName}\nto {targetFile}\n{exc}\n" );
                     throw;
                 }
             }
@@ -739,23 +747,332 @@ public partial class HelperLib
         }
     }
 
-    private static string CreateDate_Extract(string fileFullName)
-    {
-        var directories = GetMetadata( fileFullName );
-        var _ExifSubIfdDirectory = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
+    /// <summary>
+    /// CameraRoll_MoveNoDb - Move all files in the Camera Roll folder to the correct date based folder under Photos or Videos root folder.
+    /// Does not use the CheckSum table.
+    /// </summary>
+    /// <param name="verbose" string>Verbose logging</param>
 
-        if ( _ExifSubIfdDirectory is not null )
+    public static void CameraRoll_MoveNoDb(bool verbose)
+    {
+        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+
+        Log.Information( $"Starting with verbose: {verbose}" );
+
+        // Create a list of all files in the Camera Roll folder
+        DirectoryInfo cameraRollDir = new( @"C:\\Users\\Alann\\OneDrive\\Pictures\\Camera Roll" );
+        FileInfo[] files = cameraRollDir.GetFiles( "*", SearchOption.AllDirectories );
+        if ( files.Length == 0 )
         {
-            string _sCreateDateTime = _ExifSubIfdDirectory.GetDescription( ExifSubIfdDirectory.TagDateTimeOriginal )!;
-            if ( !string.IsNullOrEmpty( _sCreateDateTime ) && !_sCreateDateTime.Equals( "0000:00:00 00:00:00" ) )
+            Log.Warning( $"No files found in {cameraRollDir.FullName}" );
+            return;
+        }
+        Log.Information( $"{files.Length:N0} files found in {cameraRollDir.FullName}" );
+
+        // Process all the files found in the folder
+        CameraRoll_Files_Process( files );
+
+        Log.Information( "Finished processing files" );
+    }
+
+    private static void CameraRoll_Files_Process(FileInfo[] files)
+    {
+        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+
+        int movedCount = 0, dropCount = 0;
+
+        // read the OneDriveFolders from appsettings.json using the machine name
+        string? photosTarget = Environment.MachineName == "BEELINK-1" ? _config["OneDriveFolders:BEELINK-1:Photos"] : null;
+        string? videosTarget = Environment.MachineName == "BEELINK-1" ? _config["OneDriveFolders:BEELINK-1:Videos"] : null;
+
+        if ( string.IsNullOrEmpty( photosTarget ) || string.IsNullOrEmpty( videosTarget ) )
+            throw new Exception( $"OneDriveFolders not found in appsettings.json for machine: {Environment.MachineName}" );
+
+        Log.Information( $"Processing {files.Length:N0} files" );
+
+        // Iterate through each file and process it
+        foreach ( FileInfo file in files )
+        {
+            try
             {
-                if ( _sCreateDateTime[0..10].IndexOf( ':' ) > -1 )
+                // Check if file extension matches the media type
+                var type = _fileExtensionTypes.Find( e => e.Type == file.Extension.ToUpper() );
+                if ( type is null )
                 {
-                    return _sCreateDateTime[0..10].Replace( ':', '-' ) + _sCreateDateTime[10..];
+                    dropCount++;
+                    Log.Warning( $"File extension: {file.Extension} not found in fileExtensionTypes for file {file.FullName}." );
+                    continue;
+                }
+
+                // Find the creation date using 2 metadata routines and the filename as necessary
+                DateTime? createDateTime = (CreateDate_Extract( file.FullName, type )
+                                            ?? ImageEXIF( file ))
+                                            ?? CreateDate_FromFileName( file.FullName );
+
+                // If no valid creation date found, log and skip the file
+                if ( createDateTime is null )
+                {
+                    dropCount++;
+                    Log.Warning( $"No valid creation date found for {file.FullName}" );
+                    continue;
+                }
+
+                // Determine target root folder based on media type
+                string rootFolder, targetFolder;
+                if ( type.Group == "Photo" )
+                {
+                    rootFolder = photosTarget;
+                    targetFolder = Path.Combine( rootFolder, createDateTime.Value.Year.ToString(), createDateTime.Value.Month.ToString( "00" ) );
+                }
+                else
+                {
+                    rootFolder = videosTarget;
+                    targetFolder = Path.Combine( rootFolder, $"""{createDateTime.Value.Year.ToString()}-{createDateTime.Value.Month.ToString( "00" )}""" );
+                }
+
+                string targetFile = Path.Combine( targetFolder, file.Name );
+                if ( File.Exists( targetFile ) )
+                {
+                    dropCount++;
+                    Log.Warning( $"File already exists at target location: {targetFolder}. Skipping file: {file.FullName}" );
+                    continue;
+                }
+
+                // Create target directory if it doesn't exist
+                System.IO.Directory.CreateDirectory( targetFolder );
+
+                // Move the file
+                file.MoveTo( targetFile, overwrite: true );
+                movedCount++;
+                if ( movedCount % 100 == 0 ) Log.Information( $"Processed {movedCount:N0} files" );
+            }
+            catch ( Exception ex )
+            {
+                dropCount++;
+                Log.Error( ex, $"Error processing file: {file.FullName}" );
+            }
+        }
+
+        //var parallel = Parallel.ForEach( files, file =>
+        //{
+
+        //    try
+        //    {
+        //        // Check if file extension matches the media type
+        //        var type = _fileExtensionTypes.Find( e => e.Type == file.Extension.ToUpper() );
+        //        if ( type is null )
+        //        {
+        //            Interlocked.Increment( ref dropCount );
+        //            return;
+        //        }
+
+        //        // Extract creation date
+        //        string createDateString = CreateDate_Extract( file.FullName );
+        //        if ( string.IsNullOrEmpty( createDateString ) || !DateTime.TryParse( createDateString, out DateTime createDateTime ) )
+        //        {
+        //            Interlocked.Increment( ref dropCount );
+        //            Log.Warning( $"No valid date found for {file.FullName}" );
+        //            return;
+        //        }
+
+        //        // Determine target folder based on media type
+        //        string rootFolder = type.Group == "Photo" ? @"C:\Users\User\OneDrive\Photos" : @"C:\Users\User\OneDrive\Videos";
+        //        string targetFolder = Path.Combine( rootFolder, createDateTime.Year.ToString(), createDateTime.Month.ToString( "00" ) );
+        //        string targetFile = Path.Combine( targetFolder, file.Name );
+
+        //        // Create target directory if it doesn't exist
+        //        System.IO.Directory.CreateDirectory( targetFolder );
+
+        //        // Move the file
+        //        file.MoveTo( targetFile, overwrite: true );
+
+        //        Interlocked.Increment( ref movedCount );
+
+        //        if ( movedCount % 100 == 0 ) Log.Information( $"Processed {movedCount:N0} files" );
+        //    }
+        //    catch ( Exception ex )
+        //    {
+        //        Interlocked.Increment( ref dropCount );
+        //        Log.Error( ex, $"Error processing file: {file.FullName}" );
+        //    }
+        //} );
+
+        Log.Information( $"Completed processing. Processed: {movedCount:N0}, Dropped: {dropCount:N0}" );
+    }
+
+    private static DateTime? CreateDate_FromFileName(string fullName)
+    {
+        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+
+        // get the date from the file name - Try 1. YYYYMMDD format
+        Regex regex1 = new( @"(?<year>19\d{2}|20\d{2})(?<month>0\d|1\d)(?<day>0\d|1\d|2\d|3[0,1])" );
+        Match match1 = regex1.Match( fullName );
+        if ( match1.Success )
+        {
+            string year = match1.Groups["year"].Value;
+            string month = match1.Groups["month"].Value;
+            string day = match1.Groups["day"].Value;
+            string date = $"{year}-{month}-{day}";
+
+            // get the date from the sourceDir name
+            if ( DateTime.TryParseExact( date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime createDate ) )
+            {
+                Log.Information( $"Try 1 - file: {fullName} - date: {createDate}" );
+
+                // make time part of createdate equal to 23:59:59
+                createDate = createDate.AddHours( 23 ).AddMinutes( 59 ).AddSeconds( 59 );
+                return createDate;
+            }
+        }
+
+        // get the date from the file name - try 2. Date has hypens separating year, month and day
+        Regex regex2 = new( @"(?<year>19\d{2}|20\d{2})-(?<month>0\d|1\d)-(?<day>0\d|1\d|2\d|3[0,1])" );
+        Match match2 = regex2.Match( fullName );
+        if ( match2.Success )
+        {
+            string year = match2.Groups["year"].Value;
+            string month = match2.Groups["month"].Value;
+            string day = match2.Groups["day"].Value;
+            string date = $"{year}-{month}-{day}";
+            // get the date from the sourceDir name
+            if ( DateTime.TryParseExact( date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime createDate ) )
+            {
+                Log.Information( $"Try 2 - file: {fullName} - date: {createDate}" );
+                return createDate.AddHours( 23 ).AddMinutes( 59 ).AddSeconds( 59 );
+            }
+        }
+
+        // get the folder path from the file fullname
+        string folderPath = Path.GetDirectoryName( fullName )!;
+
+        // Try 3 - get the date from the folder where the folder path ends with yyyy-MM-dd
+        Regex regex3 = new( @"(?<year>19\d{2}|20\d{2})-(?<month>0\d|1\d)-(?<day>0\d|1\d|2\d|3[0,1])$" );
+        Match match3 = regex3.Match( folderPath );
+        if ( match3.Success )
+        {
+            string year = match3.Groups["year"].Value;
+            string month = match3.Groups["month"].Value;
+            string day = match3.Groups["day"].Value;
+            string date = $"{year}-{month}-{day}";
+            // get the date from the sourceDir name
+            if ( DateTime.TryParseExact( date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime createDate ) )
+            {
+                Log.Information( $"Try 3 - file: {fullName} - date: {createDate}" );
+                return createDate.AddHours( 23 ).AddMinutes( 59 ).AddSeconds( 59 );
+            }
+        }
+
+        // Try 4 - get the date from the folder where the folder path ends with yyyy-MM
+        Regex regex4 = new( @"(?<year>19\d{2}|20\d{2})-(?<month>0\d|1\d)$" );
+        Match match4 = regex4.Match( folderPath );
+        if ( match4.Success )
+        {
+            string year = match4.Groups["year"].Value;
+            string month = match4.Groups["month"].Value;
+            string date = $"{year}-{month}-01";
+            // get the date from the sourceDir name
+            if ( DateTime.TryParseExact( date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime createDate ) )
+            {
+                Log.Information( $"Try 4 - file: {fullName} - date: {createDate}" );
+                return createDate.AddHours( 23 ).AddMinutes( 59 ).AddSeconds( 59 );
+            }
+        }
+
+        // Try 5 - get the date from the folder where the folder path ends with Photos from yyyy
+        Regex regex5 = new( @"Photos from (?<year>19\d{2}|20\d{2})$" );
+        Match match5 = regex5.Match( folderPath );
+        if ( match5.Success )
+        {
+            string year = match5.Groups["year"].Value;
+            string date = $"{year}-01-01";
+            // get the date from the sourceDir name
+            if ( DateTime.TryParseExact( date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime createDate ) )
+            {
+                Log.Information( $"Try 5 - file: {fullName} - date: {createDate}" );
+                return createDate.AddHours( 23 ).AddMinutes( 59 ).AddSeconds( 59 );
+            }
+        }
+
+        // Try 6 - get the date from the folder where the folder path ends with \yyyy\mm
+        Regex regex6 = new( @"\\(?<year>19\d{2}|20\d{2})\\(?<month>\d{2})$" );
+        Match match6 = regex6.Match( folderPath );
+        if ( match6.Success )
+        {
+            string year = match6.Groups["year"].Value;
+            string month = match6.Groups["month"].Value.PadLeft( 2, '0' );
+            string date = $"{year}-{month}-01";
+            // get the date from the sourceDir name
+            if ( DateTime.TryParseExact( date, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime createDate ) )
+            {
+                Log.Information( $"Try 6 - file: {fullName} - date: {createDate}" );
+                return createDate.AddHours( 23 ).AddMinutes( 59 ).AddSeconds( 59 );
+            }
+        }
+
+        return null;
+    }
+
+    private static DateTime? CreateDate_Extract(string fileFullName, FileExtensionTypes type)
+    {
+        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+
+        // Extract the EXIF directories of the image file
+        var directories = GetMetadata( fileFullName );
+
+        // need to process type.group differently
+        if ( type.Group == "Photo" )
+        {
+            // Find the ExifSubIfdDirectory which contains the DateTimeOriginal tag
+            var _ExifSubIfdDirectory = directories.OfType<ExifSubIfdDirectory>().FirstOrDefault();
+
+            if ( _ExifSubIfdDirectory is not null )
+            {
+                string? _sCreateDateTime = _ExifSubIfdDirectory.GetDescription( ExifSubIfdDirectory.TagDateTimeOriginal );
+                if ( !string.IsNullOrEmpty( _sCreateDateTime ) && !_sCreateDateTime.Equals( "0000:00:00 00:00:00" ) )
+                {
+                    if ( _sCreateDateTime[0..10].IndexOf( ':' ) > -1 )
+                    {
+                        // If the date is in the format '2023:10:01 12:34:56', replace ':' with '-'
+                        _sCreateDateTime = _sCreateDateTime[0..10].Replace( ':', '-' ) + _sCreateDateTime[10..];
+                        if ( DateTime.TryParse( _sCreateDateTime, out DateTime _CreateDateTime ) )
+                        {
+                            Log.Information( $"type.Group: {type.Group}, file: {fileFullName}, date: {_CreateDateTime}" );
+                            return _CreateDateTime;
+                        }
+                    }
                 }
             }
         }
-        return string.Empty;
+        else if ( type.Group == "Video" )
+        {
+            var _QuickTimeDirectory = directories.OfType<QuickTimeMovieHeaderDirectory>().FirstOrDefault();
+
+            if ( _QuickTimeDirectory is not null )
+            {
+                string? _sCreateDateTime = _QuickTimeDirectory.GetDescription( QuickTimeMovieHeaderDirectory.TagCreated );
+                if ( !string.IsNullOrEmpty( _sCreateDateTime ) )
+                {
+                    DateTime? _CreateDateTime = null;
+                    try
+                    {
+                        _CreateDateTime = DateTime.ParseExact( _sCreateDateTime, "ddd MMM dd HH:mm:ss yyyy", CultureInfo.InvariantCulture );
+                    }
+                    catch ( Exception exc )
+                    {
+                        Log.Error( exc, $"type.Group: {type.Group}, file: {fileFullName}, _sCreateDateTime: {_sCreateDateTime}" );
+                        return null;
+                    }
+
+                    if ( _CreateDateTime is not null )
+                    {
+                        Log.Information( $"type.Group: {type.Group}, file: {fileFullName}, date: {_CreateDateTime}" );
+                        return _CreateDateTime;
+                    }
+                }
+            }
+        }
+
+        return null;
     }
 
 
@@ -812,11 +1129,15 @@ public partial class HelperLib
         db.Execute( "dbo.spCheckSum_ins", p, commandType: CommandType.StoredProcedure );
     }
 
-
-    public static (DateTime CreateDateTime, string sCreateDateTime) ImageEXIF(FileInfo fileInfo)
+    /// <summary>
+    /// Convert the file to an image and then extract the created datetime
+    /// </summary>
+    /// <param name="fileInfo"></param>
+    /// <returns>DateTime - the image created date time</returns>
+    public static DateTime? ImageEXIF(FileInfo fileInfo)
     {
-        DateTime _CreateDateTime = new DateTime( 1753, 1, 1 );
-        string _sCreateDateTime = "Date not found";
+        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+
         ImageFile _image;
 
         // try to convert the file into a EXIF ImageFile
@@ -824,36 +1145,29 @@ public partial class HelperLib
         {
             _image = ImageFile.FromFile( fileInfo.FullName );
         }
-        catch ( NotValidImageFileException )
+        catch ( NotValidImageFileException nvife )
         {
-            _sCreateDateTime = "Not valid image";
-            Serilog.Log.Error( $"ImageEXIF - File: {fileInfo.FullName}, _sCreateDateTime: {_sCreateDateTime}, _CreateDateTime: {_CreateDateTime}" );
-
-            return (CreateDateTime: _CreateDateTime, sCreateDateTime: _sCreateDateTime);
+            Log.Error( $"File: {fileInfo.FullName}", nvife );
+            return null;
         }
         catch ( Exception exc )
         {
-            _sCreateDateTime = "ERROR -see log";
-            Serilog.Log.Error( $"ImageEXIF - File: {fileInfo.FullName}\r\n{exc}\r\n" );
-
-            return (CreateDateTime: _CreateDateTime, sCreateDateTime: _sCreateDateTime);
+            Log.Error( $" File: {fileInfo.FullName}", exc );
+            return null;
         }
 
         ExifDateTime _dateTag = _image.Properties.Get<ExifDateTime>( ExifTag.DateTime );
 
-        if ( _dateTag != null )
+        if ( _dateTag is not null )
         {
-            _sCreateDateTime = _dateTag.ToString();
-            if ( DateTime.TryParse( _sCreateDateTime, out _CreateDateTime ) )
+            if ( DateTime.TryParse( _dateTag.ToString(), out DateTime _CreateDateTime ) )
             {
-                if ( _CreateDateTime == DateTime.MinValue )
-                {
-                    _CreateDateTime = new DateTime( 1753, 1, 1 );
-                }
+                Log.Information( $"file: {fileInfo.FullName} - date: {_CreateDateTime}" );
+                return _CreateDateTime == DateTime.MinValue ? null : _CreateDateTime;
             }
         }
 
-        return (CreateDateTime: _CreateDateTime, sCreateDateTime: _sCreateDateTime);
+        return null;
     }
 
 
@@ -892,6 +1206,8 @@ public partial class HelperLib
     /// <returns>List<MetadataExtractor.Directory></returns>
     public static DirectoryList GetMetadata(string filePath)
     {
+        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+
         var directories = new List<MetadataExtractor.Directory>();
 
         using ( var stream = new FileStream( filePath, FileMode.Open, FileAccess.Read, FileShare.Read ) )
@@ -901,26 +1217,31 @@ public partial class HelperLib
 
         directories.Add( new FileMetadataReader().Read( filePath ) );
 
+        Log.Information( $"Found {directories.Count} directories for file: {filePath}" );
         return directories;
     }
 
 
-    /// <summary>Reads metadata from an <see cref="Stream"/>.</summary>
+    /// <summary>Reads metadata from an <see cref="Stream"/>
+    /// Depending on the FileTpe found in the stream</summary>
     /// <param name="stream">A stream from which the file data may be read.  The stream must be positioned at the beginning of the file's data.</param>
     /// <returns>A list of <see cref="Directory"/> instances containing the various types of metadata found within the file's data.</returns>
     /// <exception cref="ImageProcessingException">The file type is unknown, or processing errors occurred.</exception>
     /// <exception cref="Exception"/>
     public static DirectoryList ReadMetadata(Stream stream)
     {
-        // get the media file type from the file
-        var fileType = FileTypeDetector.DetectFileType( stream );
-
         var directories = new List<MetadataExtractor.Directory>();
+
+        if ( stream is null ) throw new ArgumentNullException( nameof( stream ), "Stream cannot be null" );
+
+        // get the media file type from the file
+        try
+        {
+            var fileType = FileTypeDetector.DetectFileType( stream );
+            if ( fileType == FileType.Unknown ) throw new ImageProcessingException( "File type could not be determined" );
 
 #pragma warning disable format
 
-		try 
-		{					
 			directories.AddRange(fileType switch
 			{
 				FileType.Arw       => TiffMetadataReader.ReadMetadata(stream),
@@ -952,20 +1273,24 @@ public partial class HelperLib
 				FileType.Unknown   => throw new ImageProcessingException("File format could not be determined"),
 				_                  => Enumerable.Empty<MetadataExtractor.Directory>()
 			});
-	
-		}
-		catch (MetadataExtractor.ImageProcessingException ipx)
-        {
-			Log.Error($"ReadMetadata - {ipx}");
-        }
-		catch (Exception exc)
-		{
-			Log.Error($"ReadMetadata - {exc}");
-		}
-
 #pragma warning restore format
 
-        directories.Add( new FileTypeDirectory( fileType ) );
+            directories.Add( new FileTypeDirectory( fileType ) );
+
+            return directories;
+        }
+        catch ( ImageProcessingException ipx )
+        {
+            Log.Error( $"ReadMetadata - {ipx}" );
+        }
+        catch ( Exception exc )
+        {
+            Log.Error( $"ReadMetadata - {exc}" );
+        }
+        finally
+        {
+            stream.Close();
+        }
 
         return directories;
     }
@@ -1187,5 +1512,41 @@ public partial class HelperLib
         // Save the changes
         photosCtx!.SaveChanges();
         Log.Information( $"ShaDelete - Finished, lines.Count: {lines.Count:N0}" );
+    }
+
+    /// <summary>
+    /// Helper method to create method-named scopes for logging throughout the application
+    /// </summary>
+    /// <param name="methodName">Automatically captured method name</param>
+    /// <returns>IDisposable scope that includes the method name in logs</returns>
+    public static IDisposable BeginMethodScopeLocal([CallerMemberName] string methodName = "")
+    {
+        // Create a combined scope with both SourceContext and MethodName
+        var sourceScope = Serilog.Context.LogContext.PushProperty( "SourceContext", "FinRite.FinRiteLib" );
+        var methodScope = Serilog.Context.LogContext.PushProperty( "MethodName", methodName );
+
+        // Return a combined disposable that disposes both scopes
+        return new CombinedDisposable( sourceScope, methodScope );
+    }
+
+    /// <summary>
+    /// Helper class to dispose multiple IDisposable objects
+    /// </summary>
+    private class CombinedDisposable : IDisposable
+    {
+        private readonly IDisposable[] _disposables;
+
+        public CombinedDisposable(params IDisposable[] disposables)
+        {
+            _disposables = disposables;
+        }
+
+        public void Dispose()
+        {
+            foreach ( var disposable in _disposables )
+            {
+                disposable?.Dispose();
+            }
+        }
     }
 }
