@@ -91,6 +91,20 @@ Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
 
 `./DupesMaint2 CameraRoll_Move --mediaFileType Photo`
 
+## Subcommand4a - CameraRoll_MoveNoDb
+
+Move media files from folder "C:\Users\User\OneDrive\Pictures\Camera Roll" to Photos\YYYY\MM or Video\YYYY-MM folders for appropriate year and month.
+
+### --verbose true/<u>false</u>
+
+Toggle verbose logging.
+
+### Usage
+
+Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
+
+`./DupesMaint2 CameraRoll_MoveNoDb --verbose true`
+
 ## Subcommand5 - CalculateHashes
 
 Calculate and store up to 4 hashes in the CheckSum table for photos only.
