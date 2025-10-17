@@ -781,6 +781,10 @@ public partial class HelperLib
 
         int movedCount = 0, dropCount = 0;
 
+        // Validate that configuration is available
+        if ( _config is null )
+            throw new InvalidOperationException( "Configuration is not initialized. Ensure HelperLib constructor has been called." );
+
         // read the OneDriveFolders from appsettings.json using the machine name
         string? photosTarget = Environment.MachineName == "BEELINK-1" ? _config["OneDriveFolders:BEELINK-1:Photos"] : null;
         string? videosTarget = Environment.MachineName == "BEELINK-1" ? _config["OneDriveFolders:BEELINK-1:Videos"] : null;
