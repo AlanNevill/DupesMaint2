@@ -1,10 +1,14 @@
 ﻿using DupesMaint2.Models;
 
+using EmailerUtility;
+using EmailerUtility.Models;
+
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 
 using Serilog;
 
@@ -35,7 +39,19 @@ internal class Program
                 {
                     options.UseSqlServer( _cnStr );
                 } );
-                //services.AddTransient<IGreetingService, GreetingService>();
+                
+                // Register EmailerUtility services
+                // First register the EmailerDb context
+                services.AddDbContext<EmailerDb>( options =>
+                {
+                    // Use the connection string from configuration for EmailerUtility
+                    var emailerConnectionString = _config.GetConnectionString( "EmailerDb" ) ?? _cnStr;
+                    options.UseSqlServer( emailerConnectionString );
+                } );
+                
+                // Register the EmailerClient
+                services.AddScoped<IEmailerClient, EmailerClient>();
+                
                 services.AddSingleton<HelperLib, HelperLib>();
             } )
             .Build();

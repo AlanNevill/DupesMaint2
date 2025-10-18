@@ -585,7 +585,7 @@ public partial class HelperLib
     /// <param name="replace">Bool - If True truncate the CheckSum table else add rows.</param>
     public static void ProcessEXIF(DirectoryInfo folder, bool replace)
     {
-        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
 
         int _count = 0;
         Log.Information( $"target folder is {folder.FullName}\tTruncate CheckSum is: {replace}." );
@@ -658,7 +658,7 @@ public partial class HelperLib
     /// <param name="verbose">Verbose logging</param>
     public static void CameraRoll_Move(string mediaFileType, bool verbose)
     {
-        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
 
         Log.Information( $"Starting\n\tmediaFileType: {mediaFileType}\n\tverbose: {verbose}\n" );
         Stopwatch _stopwatch = Stopwatch.StartNew();
@@ -758,7 +758,7 @@ public partial class HelperLib
     /// <param name="verbose" string>Verbose logging</param>
     public async static void CameraRoll_MoveNoDb(bool verbose)
     {
-        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
 
         Log.Information( $"Starting with verbose: {verbose}" );
 
@@ -780,7 +780,7 @@ public partial class HelperLib
 
     public async static void Takeout_MoveNoDb(DirectoryInfo sourceFolder, bool verbose)
     {
-        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
 
         Log.Information( $"Starting, processing folder [{sourceFolder}] with verbose: {verbose}" );
 
@@ -802,7 +802,7 @@ public partial class HelperLib
 
     private static async Task Files_Process(FileInfo[] files)
     {
-        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
 
         int processedCount = 0, movedCount = 0, deleteCount = 0;
         long startTimeStemp = Stopwatch.GetTimestamp();
@@ -960,12 +960,6 @@ public partial class HelperLib
        string? bodyText = null,
        int priority = 1)
     {
-        // TODO: Add EmailerUtility package reference to enable this functionality
-        // For now, this method is disabled to allow the project to build
-        Log.Warning( $"SendEmailWithAttachmentsAsync - Email functionality not available. EmailerUtility package not referenced. Would have sent email to: {toAddress}" );
-        return await Task.FromResult( -1L );
-        
-        /* Original code - uncomment when EmailerUtility is added as a reference
         try
         {
             if ( Program._serviceProvider == null )
@@ -995,7 +989,7 @@ public partial class HelperLib
                 scheduledAtUtc: null,
                 recipients: null,
                 attachments: attachments,
-                fromAddress: Program._config?["EmailerUtility:DefaultFromAddress"] ?? "noreply@DupesNaint2.local"
+                fromAddress: Program._config?["EmailerUtility:DefaultFromAddress"] ?? "noreply@DupesMaint2.local"
             );
 
             Log.Information( $"HelperLib.SendEmailWithAttachmentsAsync - Email with {attachments.Count} attachments queued. MessageId: {messageId}" );
@@ -1006,13 +1000,12 @@ public partial class HelperLib
             Log.Error( exc, $"HelperLib.SendEmailWithAttachmentsAsync - Failed to send email with attachments. To: {toAddress}" );
             return -1;
         }
-        */
     }
 
 
     private static DateTime? CreateDate_FromFileName(string fullName)
     {
-        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
 
         // get the date from the file name - Try 1. YYYYMMDD format
         Regex regex1 = new( @"(?<year>19\d{2}|20\d{2})(?<month>0\d|1\d)(?<day>0\d|1\d|2\d|3[0,1])" );
@@ -1124,7 +1117,7 @@ public partial class HelperLib
 
     private static DateTime? CreateDate_Extract(string fileFullName, FileExtensionTypes type)
     {
-        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
 
         // Extract the EXIF directories of the image file
         var directories = GetMetadata( fileFullName );
@@ -1246,7 +1239,7 @@ public partial class HelperLib
     /// <returns>DateTime - the image created date time</returns>
     public static DateTime? ImageEXIF(FileInfo fileInfo)
     {
-        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
 
         ImageFile _image;
 
@@ -1316,7 +1309,7 @@ public partial class HelperLib
     /// <returns>List<MetadataExtractor.Directory></returns>
     public static DirectoryList GetMetadata(string filePath)
     {
-        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
 
         var directories = new List<MetadataExtractor.Directory>();
 
@@ -1630,7 +1623,7 @@ public partial class HelperLib
     /// </summary>
     /// <param name="methodName">Automatically captured method name</param>
     /// <returns>IDisposable scope that includes the method name in logs</returns>
-    public static IDisposable BeginMethodScopeLocal([CallerMemberName] string methodName = "")
+    public static IDisposable BeginningMethodScopeLocal([CallerMemberName] string methodName = "")
     {
         // Create a combined scope with both SourceContext and MethodName
         var sourceScope = Serilog.Context.LogContext.PushProperty( "SourceContext", "FinRite.FinRiteLib" );
