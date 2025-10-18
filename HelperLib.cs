@@ -40,10 +40,12 @@ using Serilog;
 
 using System.Data;
 using System.Diagnostics;
+using System.Drawing;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 
 using DirectoryList = System.Collections.Generic.IReadOnlyList<MetadataExtractor.Directory>;
@@ -199,7 +201,7 @@ public partial class HelperLib
         Log.Information( $"""
 			LoadFileType - Total execution time: {_stopwatch.Elapsed.Minutes:N1} mins. 
 				processCount:	{processCount:N0}, 
-				dropCount:		{dropCount:N0}
+				deleteCount:		{dropCount:N0}
 			{new String( '-', 135 )}
 		""" );
     }
@@ -328,7 +330,7 @@ public partial class HelperLib
 				parallel.ToString:	{parallel}
 				allCheckSums.Count:	{photosCtx.CheckSum.LongCount():N0}
 				movedCount:		{processedCount:N0}
-				dropCount:			{dropCount:N0}
+				deleteCount:			{dropCount:N0}
 				execution time:		{_stopwatch.Elapsed.TotalMinutes:N1} mins
 		{new String( '-', 132 )}
 		""" );
@@ -682,7 +684,7 @@ public partial class HelperLib
         }
 
         _stopwatch.Stop();
-        Log.Information( $"movedCount: {processedCount:N0}, dropCount: {dropCount:N0}" );
+        Log.Information( $"movedCount: {processedCount:N0}, deleteCount: {dropCount:N0}" );
         Log.Information( $"Total execution time: {_stopwatch.Elapsed.TotalSeconds} secs.\n{new String( '-', 150 )}\n" );
 
         ///////////////////
@@ -752,7 +754,6 @@ public partial class HelperLib
     /// Does not use the CheckSum table.
     /// </summary>
     /// <param name="verbose" string>Verbose logging</param>
-
     public static void CameraRoll_MoveNoDb(bool verbose)
     {
         using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
@@ -770,16 +771,40 @@ public partial class HelperLib
         Log.Information( $"{files.Length:N0} files found in {cameraRollDir.FullName}" );
 
         // Process all the files found in the folder
-        CameraRoll_Files_Process( files );
+        Files_Process( files );
 
         Log.Information( "Finished processing files" );
     }
 
-    private static void CameraRoll_Files_Process(FileInfo[] files)
+    public static void Takeout_MoveNoDb(DirectoryInfo sourceFolder, bool verbose)
     {
         using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
 
-        int movedCount = 0, dropCount = 0;
+        Log.Information( $"Starting, processing folder [{sourceFolder}] with verbose: {verbose}" );
+
+        // Create a list of all files in the source folder
+        FileInfo[] files = sourceFolder.GetFiles( "*", SearchOption.AllDirectories );
+        if ( files.Length == 0 )
+        {
+            Log.Warning( $"No files found in {sourceFolder.FullName}" );
+            return;
+        }
+        Log.Information( $"{files.Length:N0} files found in {sourceFolder.FullName}" );
+
+        // Process all the files found in the folder
+        Files_Process( files );
+
+        Log.Information( "Finished processing files" );
+    }
+
+
+    private static void Files_Process(FileInfo[] files)
+    {
+        using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
+
+        int processedCount = 0, movedCount = 0, deleteCount = 0;
+        long startTimeStemp = Stopwatch.GetTimestamp();
+        StringBuilder sb = new("List of new files added\n");
 
         // Validate that configuration is available
         if ( _config is null )
@@ -792,18 +817,20 @@ public partial class HelperLib
         if ( string.IsNullOrEmpty( photosTarget ) || string.IsNullOrEmpty( videosTarget ) )
             throw new Exception( $"OneDriveFolders not found in appsettings.json for machine: {Environment.MachineName}" );
 
+        Log.Debug( $"Photos target folder: {photosTarget}, Videos target folder: {videosTarget}" );
         Log.Information( $"Processing {files.Length:N0} files" );
 
         // Iterate through each file and process it
         foreach ( FileInfo file in files )
         {
+            processedCount++;
             try
             {
                 // Check if file extension matches the media type
                 var type = _fileExtensionTypes.Find( e => e.Type == file.Extension.ToUpper() );
                 if ( type is null )
                 {
-                    dropCount++;
+                    deleteCount++;
                     Log.Warning( $"File extension: {file.Extension} not found in fileExtensionTypes for file {file.FullName}." );
                     continue;
                 }
@@ -816,7 +843,7 @@ public partial class HelperLib
                 // If no valid creation date found, log and skip the file
                 if ( createDateTime is null )
                 {
-                    dropCount++;
+                    deleteCount++;
                     Log.Warning( $"No valid creation date found for {file.FullName}" );
                     continue;
                 }
@@ -837,8 +864,9 @@ public partial class HelperLib
                 string targetFile = Path.Combine( targetFolder, file.Name );
                 if ( File.Exists( targetFile ) )
                 {
-                    dropCount++;
-                    Log.Warning( $"File already exists at target location: {targetFolder}. Skipping file: {file.FullName}" );
+                    deleteCount++;
+                    File.Delete( file.FullName );
+                    Log.Warning( $"File already exists at target location: {targetFolder}, deleting file: {file.FullName}" );
                     continue;
                 }
 
@@ -847,16 +875,18 @@ public partial class HelperLib
 
                 // Move the file
                 file.MoveTo( targetFile, overwrite: true );
+                sb.AppendLine( $"{file.FullName} moved to {targetFile}" );
                 movedCount++;
-                if ( movedCount % 100 == 0 ) Log.Information( $"Processed {movedCount:N0} files" );
+                if ( processedCount % 1000 == 0 ) Log.Information( $"Processed: \t{processedCount:N0} files" );
             }
             catch ( Exception ex )
             {
-                dropCount++;
+                deleteCount++;
                 Log.Error( ex, $"Error processing file: {file.FullName}" );
             }
         }
 
+        #region Old Parallel Code
         //var parallel = Parallel.ForEach( files, file =>
         //{
 
@@ -866,7 +896,7 @@ public partial class HelperLib
         //        var type = _fileExtensionTypes.Find( e => e.Type == file.Extension.ToUpper() );
         //        if ( type is null )
         //        {
-        //            Interlocked.Increment( ref dropCount );
+        //            Interlocked.Increment( ref deleteCount );
         //            return;
         //        }
 
@@ -874,7 +904,7 @@ public partial class HelperLib
         //        string createDateString = CreateDate_Extract( file.FullName );
         //        if ( string.IsNullOrEmpty( createDateString ) || !DateTime.TryParse( createDateString, out DateTime createDateTime ) )
         //        {
-        //            Interlocked.Increment( ref dropCount );
+        //            Interlocked.Increment( ref deleteCount );
         //            Log.Warning( $"No valid date found for {file.FullName}" );
         //            return;
         //        }
@@ -896,12 +926,19 @@ public partial class HelperLib
         //    }
         //    catch ( Exception ex )
         //    {
-        //        Interlocked.Increment( ref dropCount );
+        //        Interlocked.Increment( ref deleteCount );
         //        Log.Error( ex, $"Error processing file: {file.FullName}" );
         //    }
         //} );
+        #endregion
 
-        Log.Information( $"Completed processing. Processed: {movedCount:N0}, Dropped: {dropCount:N0}" );
+        long endTimeStemp = Stopwatch.GetTimestamp();
+        double elapsedTime = (endTimeStemp - startTimeStemp) * (1.0 / Stopwatch.Frequency);
+        Log.Information( $"All files loaded in {elapsedTime:N0} secs." );
+
+        Log.Information( $"Completed processing. processed: {processedCount:N0}, new files added: {movedCount:N0}, deleted: {deleteCount:N0}" );
+
+
     }
 
     private static DateTime? CreateDate_FromFileName(string fullName)
@@ -1517,6 +1554,7 @@ public partial class HelperLib
         photosCtx!.SaveChanges();
         Log.Information( $"ShaDelete - Finished, lines.Count: {lines.Count:N0}" );
     }
+
 
     /// <summary>
     /// Helper method to create method-named scopes for logging throughout the application

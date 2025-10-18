@@ -225,7 +225,7 @@ public class HelperLibTests : IDisposable
     private void InvokeCameraRollFilesProcess(FileInfo[] files)
     {
         // Use reflection to invoke the private static method
-        var method = typeof( HelperLib ).GetMethod( "CameraRoll_Files_Process", BindingFlags.NonPublic | BindingFlags.Static );
+        var method = typeof( HelperLib ).GetMethod( "Files_Process", BindingFlags.NonPublic | BindingFlags.Static );
 
         method?.Invoke( null, new object[] { files } );
     }

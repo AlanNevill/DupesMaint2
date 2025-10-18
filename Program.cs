@@ -101,15 +101,28 @@ internal class Program
         rootCommand.AddCommand( command4 );
         #endregion
 
-        // Command4a - CameraRoll_Move
+        // Command4a - CameraRoll_MoveNoDb
         #region "subcommand4a CameraRoll_MoveNoDb"
         Command command4a = new( "CameraRoll_MoveNoDb", "Move media file types from CameraRoll folder to date folders without using the database." )
         {
             verbose
         };
-        command4a.SetHandler( (verbose) => { HelperLib.CameraRoll_MoveNoDb( verbose ); }, verbose );
+        command4a.SetHandler( (verbose) => { HelperLib.CameraRoll_MoveNoDb( verbose ); },  verbose );
         rootCommand.AddCommand( command4a );
         #endregion
+
+
+        // Command4b - Takeout_MoveNoDb
+        #region "subcommand4b Takeout_MoveNoDb"
+        Command command4b = new( "Takeout_MoveNoDb", "Move media file types from Source folder to date folders without using the database." )
+        {
+            folder,
+            verbose
+        };
+        command4b.SetHandler( (folder, verbose) => { HelperLib.Takeout_MoveNoDb( folder, verbose ); }, folder, verbose );
+        rootCommand.AddCommand( command4b );
+        #endregion
+
 
 
         // Command5 - calculate and store up to 3 hashes and the SHA256 hash in the CheckSum table
