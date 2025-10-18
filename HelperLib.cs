@@ -35,6 +35,7 @@ using MetadataExtractor.Util;
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 
 using Serilog;
 
@@ -47,6 +48,7 @@ using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 
 using DirectoryList = System.Collections.Generic.IReadOnlyList<MetadataExtractor.Directory>;
 using File = System.IO.File;
@@ -754,7 +756,7 @@ public partial class HelperLib
     /// Does not use the CheckSum table.
     /// </summary>
     /// <param name="verbose" string>Verbose logging</param>
-    public static void CameraRoll_MoveNoDb(bool verbose)
+    public async static void CameraRoll_MoveNoDb(bool verbose)
     {
         using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
 
@@ -771,12 +773,12 @@ public partial class HelperLib
         Log.Information( $"{files.Length:N0} files found in {cameraRollDir.FullName}" );
 
         // Process all the files found in the folder
-        Files_Process( files );
+        await Files_Process( files );
 
         Log.Information( "Finished processing files" );
     }
 
-    public static void Takeout_MoveNoDb(DirectoryInfo sourceFolder, bool verbose)
+    public async static void Takeout_MoveNoDb(DirectoryInfo sourceFolder, bool verbose)
     {
         using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
 
@@ -792,13 +794,13 @@ public partial class HelperLib
         Log.Information( $"{files.Length:N0} files found in {sourceFolder.FullName}" );
 
         // Process all the files found in the folder
-        Files_Process( files );
+        await Files_Process( files );
 
         Log.Information( "Finished processing files" );
     }
 
 
-    private static void Files_Process(FileInfo[] files)
+    private static async Task Files_Process(FileInfo[] files)
     {
         using var scope = BeginMethodScopeLocal(); // Automatically uses method name for logging
 
@@ -938,8 +940,75 @@ public partial class HelperLib
 
         Log.Information( $"Completed processing. processed: {processedCount:N0}, new files added: {movedCount:N0}, deleted: {deleteCount:N0}" );
 
+        // write stringbuilder sb to a file
+        string newFilesPath = Path.Combine( photosTarget, $"Takeout_MoveNoDb_New_Files_{DateTime.Now:yyyy-mm-dd}.txt" );
+        await File.WriteAllTextAsync( newFilesPath, sb.ToString() );
+        List<string> attachmentPaths = new() { newFilesPath };
 
+        await SendEmailWithAttachmentsAsync("alannevill@gmail.com",
+            "Takeout_MoveNoDb Completed",
+            $"<p>Processed: {processedCount:N0} files.<br/>New files added: {movedCount:N0}.<br/>Deleted: {deleteCount:N0}.</p>",
+            attachmentPaths: attachmentPaths,
+            bodyText: $"Processed: {processedCount:N0} files.\nNew files added: {movedCount:N0}.\nDeleted: {deleteCount:N0}." );
     }
+
+    public static async Task<long> SendEmailWithAttachmentsAsync(
+       string toAddress,
+       string subject,
+       string bodyHtml,
+       List<string> attachmentPaths,
+       string? bodyText = null,
+       int priority = 1)
+    {
+        // TODO: Add EmailerUtility package reference to enable this functionality
+        // For now, this method is disabled to allow the project to build
+        Log.Warning( $"SendEmailWithAttachmentsAsync - Email functionality not available. EmailerUtility package not referenced. Would have sent email to: {toAddress}" );
+        return await Task.FromResult( -1L );
+        
+        /* Original code - uncomment when EmailerUtility is added as a reference
+        try
+        {
+            if ( Program._serviceProvider == null )
+            {
+                Log.Error( "HelperLib.SendEmailWithAttachmentsAsync - Service provider not initialized." );
+                return -1;
+            }
+
+            var emailerClient = Program._serviceProvider.GetService<EmailerUtility.IEmailerClient>();
+            if ( emailerClient == null )
+            {
+                Log.Error( "HelperLib.SendEmailWithAttachmentsAsync - EmailerClient not available." );
+                return -1;
+            }
+
+            // Create attachment records
+            var attachments = attachmentPaths.Select( path =>
+                new EmailerUtility.Models.Records.EmailAttachmentRec { FilePathAndName = path }
+            ).ToList();
+
+            var messageId = await emailerClient.EnqueueAsync(
+                toAddress: toAddress,
+                subject: subject,
+                bodyHtml: bodyHtml,
+                bodyText: bodyText,
+                priority: priority,
+                scheduledAtUtc: null,
+                recipients: null,
+                attachments: attachments,
+                fromAddress: Program._config?["EmailerUtility:DefaultFromAddress"] ?? "noreply@DupesNaint2.local"
+            );
+
+            Log.Information( $"HelperLib.SendEmailWithAttachmentsAsync - Email with {attachments.Count} attachments queued. MessageId: {messageId}" );
+            return messageId;
+        }
+        catch ( Exception exc )
+        {
+            Log.Error( exc, $"HelperLib.SendEmailWithAttachmentsAsync - Failed to send email with attachments. To: {toAddress}" );
+            return -1;
+        }
+        */
+    }
+
 
     private static DateTime? CreateDate_FromFileName(string fullName)
     {

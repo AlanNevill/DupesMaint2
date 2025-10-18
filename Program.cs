@@ -17,6 +17,7 @@ internal class Program
 {
     public static IConfiguration? _config;
     public static string? _cnStr;
+    public static IServiceProvider? _serviceProvider;
 
     public static string? OneDrivePhotos { get; set; }
     public static string? OneDriveVideos { get; set; }
@@ -39,6 +40,8 @@ internal class Program
             } )
             .Build();
 
+        // Store the service provider for use in other classes
+        _serviceProvider = host.Services;
 
         // set up the HelperLib service
         var svcHelperLib = ActivatorUtilities.CreateInstance<HelperLib>( host.Services );
