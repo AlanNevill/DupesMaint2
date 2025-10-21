@@ -136,6 +136,8 @@ public partial class HelperLib
     /// <param name="verbose">Bool - If true then verbose logging.</param>
     public static void LoadFileType(DirectoryInfo folder, string fileType, bool replace, bool verbose)
     {
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
+
         System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
         Log.Information( $"""
 			LoadFileType - Starting
@@ -224,6 +226,8 @@ public partial class HelperLib
     /// <param name="verbose">bool - verbose logging</param>
     public static void CalculateHashes(bool ShaHash, bool averageHash, bool differenceHash, bool perceptualHash, bool verbose)
     {
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
+
         System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
         int processedCount = 0, dropCount = 0, totalCount = 0;
 
@@ -389,6 +393,8 @@ public partial class HelperLib
     /// <param name="verbose"></param>
     public static void PerceptualHash_Move2Hdrive(bool verbose)
     {
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
+
         System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
         int counter = 0;
 
@@ -470,6 +476,8 @@ public partial class HelperLib
     /// <param name="verbose">bool</param>
     public void FindDupsUsingHash(string hashType, bool verbose)
     {
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
+
         System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
         Log.Information( $"""
 		FindDupsUsingHash - Starting
@@ -639,6 +647,8 @@ public partial class HelperLib
     /// <param name="image">FileInfo - A photo or video file.</param>
     public static void ProcessAnEXIF(FileInfo image)
     {
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
+
         IEnumerable<MetadataExtractor.Directory> directories = ImageMetadataReader.ReadMetadata( image.FullName );
 
         Log.Information( $"ProcessAnEXIF - image: {image.FullName}" );
@@ -772,10 +782,10 @@ public partial class HelperLib
         FileInfo[] files = cameraRollDir.GetFiles( "*", SearchOption.AllDirectories );
         if ( files.Length == 0 )
         {
-      Log.Warning( $"No files found in {cameraRollDir.FullName}" );
-     return;
+              Log.Warning( $"No files found in {cameraRollDir.FullName}" );
+             return;
         }
-      Log.Information( $"{files.Length:N0} files found in {cameraRollDir.FullName}" );
+        Log.Information( $"{files.Length:N0} files found in {cameraRollDir.FullName}" );
 
         // Process all the files found in the folder
         await Files_Process( files );
@@ -785,23 +795,23 @@ public partial class HelperLib
 
     public async static Task Takeout_MoveNoDb(DirectoryInfo sourceFolder, bool verbose)
     {
-     using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
 
         Log.Information( $"Starting, processing folder [{sourceFolder}] with verbose: {verbose}" );
 
         // Create a list of all files in the source folder
         FileInfo[] files = sourceFolder.GetFiles( "*", SearchOption.AllDirectories );
-   if ( files.Length == 0 )
-        {
-    Log.Warning( $"No files found in {sourceFolder.FullName}" );
-          return;
-      }
+       if ( files.Length == 0 )
+       {
+            Log.Warning( $"No files found in {sourceFolder.FullName}" );
+            return;
+       }
         Log.Information( $"{files.Length:N0} files found in {sourceFolder.FullName}" );
 
         // Process all the files found in the folder
- await Files_Process( files );
+        await Files_Process( files );
 
-    Log.Information( "Finished processing files" );
+        Log.Information( "Finished processing files" );
     }
 
     private static async Task Files_Process(FileInfo[] files)
@@ -1435,6 +1445,8 @@ public partial class HelperLib
 
     internal static void TrainingCSV(bool verbose)
     {
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
+
         // Open a CSV file for writing
         string csvFile = Path.Combine( Environment.GetFolderPath( Environment.SpecialFolder.MyDocuments ), "DupesMaint2", "Training.csv" );
 
@@ -1480,6 +1492,8 @@ public partial class HelperLib
 
     internal static void PerceptualHashCSV(bool verbose)
     {
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
+
         Stopwatch stopwatch = Stopwatch.StartNew();
         int perceptualHashCount = 0;
         var (Year, Month, Day, Ticks) = (DateTime.Now.Year, DateTime.Now.Month, DateTime.Now.Day, DateTime.Now.Ticks);
@@ -1611,6 +1625,8 @@ public partial class HelperLib
     /// <param name="CSVfile"></param>
     internal static void ShaDelete(bool verbose, FileInfo CSVfile)
     {
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
+
         // Open the CSV file for reading
         Log.Information( $"ShaDelete - Reading CSV file: {CSVfile.FullName}" );
 
