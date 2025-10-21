@@ -1667,21 +1667,21 @@ public partial class HelperLib
     /// <summary>
     /// Helper class to dispose multiple IDisposable objects
     /// </summary>
-    private class CombinedDisposable : IDisposable
-    {
-        private readonly IDisposable[] _disposables;
+    //private class CombinedDisposable : IDisposable
+    //{
+    //    private readonly IDisposable[] _disposables;
 
-        public CombinedDisposable(params IDisposable[] disposables)
-        {
-            _disposables = disposables;
-        }
+    //    public CombinedDisposable(params IDisposable[] disposables)
+    //    {
+    //        _disposables = disposables;
+    //    }
 
-        public void Dispose()
-        {
-            foreach ( var disposable in _disposables )
-            {
-                disposable?.Dispose();
-            }
-        }
-    }
+    //    public void Dispose()
+    //    {
+    //        foreach ( var disposable in _disposables )
+    //        {
+    //            disposable?.Dispose();
+    //        }
+    //    }
+    //}
 }
