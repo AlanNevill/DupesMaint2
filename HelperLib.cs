@@ -590,7 +590,7 @@ public partial class HelperLib
     /// <param name="replace">Bool - If True truncate the CheckSum table else add rows.</param>
     public static void ProcessEXIF(DirectoryInfo folder, bool replace)
     {
-        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
 
         int _count = 0;
         Log.Information( $"target folder is {folder.FullName}\tTruncate CheckSum is: {replace}." );
@@ -663,7 +663,7 @@ public partial class HelperLib
     /// <param name="verbose">Verbose logging</param>
     public static void CameraRoll_Move(string mediaFileType, bool verbose)
     {
-        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
 
         Log.Information( $"Starting\n\tmediaFileType: {mediaFileType}\n\tverbose: {verbose}\n" );
         Stopwatch _stopwatch = Stopwatch.StartNew();
@@ -763,7 +763,7 @@ public partial class HelperLib
     /// <param name="verbose" string>Verbose logging</param>
     public async static Task CameraRoll_MoveNoDb(bool verbose)
     {
-        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
 
         Log.Information( $"Starting with verbose: {verbose}" );
 
@@ -960,33 +960,33 @@ public partial class HelperLib
         long result = 0;
         try
         {
-      Log.Information( $"Attempting to send email notification. Moved: {movedCount}, Deleted: {deleteCount}" );
+              Log.Information( $"Attempting to send email notification. Moved: {movedCount}, Deleted: {deleteCount}" );
   
-          // send email with attached list of new files added
-  result = await SendEmailWithAttachmentsAsync(
-        "alannevill@gmail.com",
-          "Takeout_MoveNoDb Completed",
-  $"<p>Processed: {processedCount:N0} files.<br/>New files added: {movedCount:N0}.<br/>Deleted: {deleteCount:N0}.<br/>Took {elapsedTime:N0} seconds</p>",
-       attachmentPaths: attachmentPaths,
-        bodyText: $"Processed: {processedCount:N0} files.\nNew files added: {movedCount:N0}.\nDeleted: {deleteCount:N0}.",
-  1
-            );
+              // send email with attached list of new files added
+              result = await SendEmailWithAttachmentsAsync(
+                   "alannevill@gmail.com",
+                    "Takeout_MoveNoDb Completed",
+                    $"<p>Processed: {processedCount:N0} files.<br/>New files added: {movedCount:N0}.<br/>Deleted: {deleteCount:N0}.<br/>Took {elapsedTime:N0} seconds</p>",
+                            attachmentPaths: attachmentPaths,
+                            bodyText: $"Processed: {processedCount:N0} files.\nNew files added: {movedCount:N0}.\nDeleted: {deleteCount:N0}.",
+                    1
+                );
 
-          Log.Information( $"SendEmailWithAttachmentsAsync returned result: {result}" );
+              Log.Information( $"SendEmailWithAttachmentsAsync returned result: {result}" );
         }
         catch ( Exception exc)
         {
-     Log.Fatal( exc, "Exception sending email notification for Takeout_MoveNoDb." );
-     throw;
+             Log.Fatal( exc, "Exception sending email notification for Takeout_MoveNoDb." );
+             throw;
         }
 
         if ( result <= 0 )
-   {
-  Log.Error( $"Failed to send email notification for Takeout_MoveNoDb. Result code: {result}" );
+        {
+            Log.Error( $"Failed to send email notification for Takeout_MoveNoDb. Result code: {result}" );
         }
         else
         {
-      Log.Information( $"Email notification for Takeout_MoveNoDb sent successfully as message Id: {result}." );
+            Log.Information( $"Email notification for Takeout_MoveNoDb sent successfully as message Id: {result}." );
         }
     }
 
@@ -1274,7 +1274,7 @@ public partial class HelperLib
     /// <returns>DateTime - the image created date time</returns>
     public static DateTime? ImageEXIF(FileInfo fileInfo)
     {
-        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
 
         ImageFile _image;
 
@@ -1344,7 +1344,7 @@ public partial class HelperLib
     /// <returns>List<MetadataExtractor.Directory></returns>
     public static DirectoryList GetMetadata(string filePath)
     {
-        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
 
         var directories = new List<MetadataExtractor.Directory>();
 
@@ -1654,29 +1654,14 @@ public partial class HelperLib
 
 
     /// <summary>
-    /// Helper method to create method-named scopes for logging throughout the application
-    /// </summary>
-    /// <param name="methodName">Automatically captured method name</param>
-    /// <returns>IDisposable scope that includes the method name in logs</returns>
-    public static IDisposable BeginningMethodScopeLocal([CallerMemberName] string methodName = "")
-    {
-        // Create a combined scope with both SourceContext and MethodName
-        var sourceScope = Serilog.Context.LogContext.PushProperty( "SourceContext", "DupesMaint2" );
-        var methodScope = Serilog.Context.LogContext.PushProperty( "MethodName", methodName );
-
-        // Return a combined disposable that disposes both scopes
-        return new CombinedDisposable( sourceScope, methodScope );
-    }
-
-    /// <summary>
     /// Helper method to create class and method-named scopes for logging throughout the application
     /// </summary>
     /// <param name="methodName">Automatically captured method name</param>
     /// <returns>IDisposable scope that includes the method name in logs</returns>
     public static IDisposable Scope<T>([CallerMemberName] string methodName = "")
     {
-        var sourceContext = $"{typeof( T ).Name}.{methodName}";
-        return Serilog.Context.LogContext.PushProperty( "MethodName", sourceContext );
+        _ = Serilog.Context.LogContext.PushProperty( "SourceContext", typeof( T ).Name );
+        return Serilog.Context.LogContext.PushProperty( "MethodName", methodName );
     }
 
     /// <summary>
