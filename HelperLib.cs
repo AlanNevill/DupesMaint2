@@ -41,14 +41,12 @@ using Serilog;
 
 using System.Data;
 using System.Diagnostics;
-using System.Drawing;
 using System.Globalization;
 using System.Reflection;
 using System.Runtime.CompilerServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
-using System.Threading.Tasks;
 
 using DirectoryList = System.Collections.Generic.IReadOnlyList<MetadataExtractor.Directory>;
 using File = System.IO.File;
@@ -61,14 +59,21 @@ public partial class HelperLib
 
     public static string? ConnectionString => Program._cnStr;
 
-    private static PhotosDbContext? photosCtx;
+    private static PhotosDbContext? _photosCtx;
+    
+    private static EmailerUtility.EmailerClient? _emailerClient;
 
-    // constructor
-    public HelperLib(IConfiguration config, PhotosDbContext photosDbContext)
+    // constructor - initialize static fields from injected dependencies
+    public HelperLib(IConfiguration config, PhotosDbContext photosDbContext, EmailerUtility.EmailerClient emailerClient)
     {
+        // Initialize static fields so they're available to all static methods
         _config = config;
-        photosCtx = photosDbContext;
-    }
+        _photosCtx = photosDbContext;
+        _emailerClient = emailerClient;
+ 
+        // Log successful initialization
+      Log.Information("HelperLib initialized with dependencies");
+ }
 
     // map file extensions mapped to media group
     static readonly List<FileExtensionTypes> _fileExtensionTypes = new()
@@ -172,7 +177,7 @@ public partial class HelperLib
                 continue;
             }
 
-            int existsCount = photosCtx!.CheckSum.Where( x => x.FileFullName == fileInfo.FullName ).Count();
+            int existsCount = _photosCtx!.CheckSum.Where( x => x.FileFullName == fileInfo.FullName ).Count();
 
             if ( existsCount != 0 )
             {
@@ -190,20 +195,20 @@ public partial class HelperLib
                 MediaFileType = fileType,
             };
 
-            photosCtx.Add( checkSum );
+            _photosCtx.Add( checkSum );
             if ( verbose ) Log.Information( $"LoadFileType - File {checkSum.FileFullName}, was added to CheckSum table." );
 
             if ( ++processCount % 1000 == 0 )
                 Log.Information( $"LoadFileType - {processCount,6:N0}. Completed: {(processCount * 100) / _files.Length}%. Processing folder: {fileInfo.DirectoryName}" );
         }
 
-        photosCtx!.SaveChanges();
+        _photosCtx!.SaveChanges();
 
         _stopwatch.Stop();
         Log.Information( $"""
 			LoadFileType - Total execution time: {_stopwatch.Elapsed.Minutes:N1} mins. 
 				processCount:	{processCount:N0}, 
-				deleteCount:		{dropCount:N0}
+				extensionNotRecognisedCount:		{dropCount:N0}
 			{new String( '-', 135 )}
 		""" );
     }
@@ -232,7 +237,7 @@ public partial class HelperLib
 		""" );
 
         // load all the CheckSum rows
-        List<CheckSum> checkSums = photosCtx!.CheckSum.ToList();
+        List<CheckSum> checkSums = _photosCtx!.CheckSum.ToList();
 
         Log.Information( $"CalculateHashes - Starting Parallel.ForEach, allCheckSums.Count: {checkSums.Count:N0}" );
 
@@ -323,16 +328,16 @@ public partial class HelperLib
         } ); // end of Parallel.ForEach
 
         // update the database
-        photosCtx!.SaveChanges();
+        _photosCtx!.SaveChanges();
 
         _stopwatch.Stop();
 
         Log.Information( $"""
 		CalculateHashes - Finished processing
 				parallel.ToString:	{parallel}
-				allCheckSums.Count:	{photosCtx.CheckSum.LongCount():N0}
+				allCheckSums.Count:	{_photosCtx.CheckSum.LongCount():N0}
 				movedCount:		{processedCount:N0}
-				deleteCount:			{dropCount:N0}
+				extensionNotRecognisedCount:			{dropCount:N0}
 				execution time:		{_stopwatch.Elapsed.TotalMinutes:N1} mins
 		{new String( '-', 132 )}
 		""" );
@@ -387,7 +392,7 @@ public partial class HelperLib
         System.Diagnostics.Stopwatch _stopwatch = System.Diagnostics.Stopwatch.StartNew();
         int counter = 0;
 
-        var perceptualHashes = from p in photosCtx!.CheckSum
+        var perceptualHashes = from p in _photosCtx!.CheckSum
                                where p.PerceptualHash != null
                                group p by p.PerceptualHash into g
                                where g.Count() > 1
@@ -398,9 +403,9 @@ public partial class HelperLib
 
         foreach ( var perceptualHash in perceptualHashes )
         {
-            photosCtx.Database.SetCommandTimeout( TimeSpan.FromMinutes( 2 ) );
+            _photosCtx.Database.SetCommandTimeout( TimeSpan.FromMinutes( 2 ) );
 
-            List<CheckSum> checkSums = photosCtx.CheckSum
+            List<CheckSum> checkSums = _photosCtx.CheckSum
                 .Where( y => y.PerceptualHash == perceptualHash.Key && y.Folder.StartsWith( @"C:\Users\User" ) )
                 .ToList();
 
@@ -419,7 +424,7 @@ public partial class HelperLib
                 }
 
                 // Move this CheckSum file
-                MoveTheFile( checkSum, photosCtx );
+                MoveTheFile( checkSum, _photosCtx );
 
                 counter++;
             }
@@ -450,7 +455,7 @@ public partial class HelperLib
 
             // Update the checkSum row
             checkSum.Folder = directoryInfo.FullName;
-            photosCtx!.SaveChanges();
+            _photosCtx!.SaveChanges();
 
             if ( verbose ) Log.Information( $"PerceptualHash_Move2Hdrive - checkSum.Id: {checkSum.Id}, checkSum.FileSize: {checkSum.FileSize:N0} was moved to: {checkSum.Folder}" );
         }
@@ -508,11 +513,11 @@ public partial class HelperLib
             {
                 case "Sha":
                     string shaHashVal = theHash.hashVal;
-                    checkSums = photosCtx!.CheckSum.Where( a => a.Sha == shaHashVal ).Include( z => z.CheckSumDupsBasedOn ).ToList();
+                    checkSums = _photosCtx!.CheckSum.Where( a => a.Sha == shaHashVal ).Include( z => z.CheckSumDupsBasedOn ).ToList();
                     break;
                 case "Perceptual":
                     decimal? hashVal = theHash.hashVal;
-                    checkSums = photosCtx!.CheckSum.Where( a => a.PerceptualHash == hashVal ).Include( z => z.CheckSumDupsBasedOn ).ToList();
+                    checkSums = _photosCtx!.CheckSum.Where( a => a.PerceptualHash == hashVal ).Include( z => z.CheckSumDupsBasedOn ).ToList();
                     break;
                 default:
                     Log.Error( $"FindDupsUsingHash - Hash: {hashType} not implemented, exiting." );
@@ -534,7 +539,7 @@ public partial class HelperLib
                         BasedOnVal = theHash.hashVal.ToString()
                     };
 
-                    photosCtx.CheckSumDupsBasedOn.Add( checkSumDupsBasedOn );
+                    _photosCtx.CheckSumDupsBasedOn.Add( checkSumDupsBasedOn );
                     insertCheckSumDupsBasedOnCount++;
                 }
             }
@@ -543,7 +548,7 @@ public partial class HelperLib
                 Log.Information( $"FindDupsUsingHash - {processedCount,6:N0}. Completed:{((processedCount * 100) / anonymousCount),3:N0}%." );
         }
 
-        photosCtx!.SaveChanges();
+        _photosCtx!.SaveChanges();
 
         _stopwatch.Stop();
         Log.Information( $"""
@@ -558,7 +563,7 @@ public partial class HelperLib
         /// Local methods
         //////////////////////////////
         object ShaHash() =>
-                from c in photosCtx!.CheckSum
+                from c in _photosCtx!.CheckSum
                 where c.Sha != null
                 group c by c.Sha
                 into g
@@ -567,7 +572,7 @@ public partial class HelperLib
                 select new { hashVal = g.Key, Count = g.Count() };
 
         object PerCeptualHash() =>
-                from c in photosCtx!.CheckSum
+                from c in _photosCtx!.CheckSum
                 where c.PerceptualHash != null
                 group c by c.PerceptualHash
                 into g
@@ -666,7 +671,7 @@ public partial class HelperLib
         int processedCount = 0, dropCount = 0;
 
         // Get all the CheckSum rows where the folder is 'C:\Users\User\OneDrive\Pictures\Camera Roll' and the MediaFileType = parameter
-        List<CheckSum> checkSum = [.. photosCtx!.CheckSum.Where( a => a.Folder == @"C:\Users\User\OneDrive\Pictures\Camera Roll" && a.MediaFileType == mediaFileType )];
+        List<CheckSum> checkSum = [.. _photosCtx!.CheckSum.Where( a => a.Folder == @"C:\Users\User\OneDrive\Pictures\Camera Roll" && a.MediaFileType == mediaFileType )];
         if ( checkSum.Count == 0 )
         {
             Log.Warning( $"Abort. No rows found for MediaFileType: {mediaFileType}\n{new String( '-', 150 )}\n" );
@@ -686,7 +691,7 @@ public partial class HelperLib
         }
 
         _stopwatch.Stop();
-        Log.Information( $"movedCount: {processedCount:N0}, deleteCount: {dropCount:N0}" );
+        Log.Information( $"movedCount: {processedCount:N0}, extensionNotRecognisedCount: {dropCount:N0}" );
         Log.Information( $"Total execution time: {_stopwatch.Elapsed.TotalSeconds} secs.\n{new String( '-', 150 )}\n" );
 
         ///////////////////
@@ -747,7 +752,7 @@ public partial class HelperLib
                     throw;
                 }
             }
-            photosCtx!.SaveChanges();
+            _photosCtx!.SaveChanges();
         }
     }
 
@@ -756,7 +761,7 @@ public partial class HelperLib
     /// Does not use the CheckSum table.
     /// </summary>
     /// <param name="verbose" string>Verbose logging</param>
-    public async static void CameraRoll_MoveNoDb(bool verbose)
+    public async static Task CameraRoll_MoveNoDb(bool verbose)
     {
         using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
 
@@ -767,10 +772,10 @@ public partial class HelperLib
         FileInfo[] files = cameraRollDir.GetFiles( "*", SearchOption.AllDirectories );
         if ( files.Length == 0 )
         {
-            Log.Warning( $"No files found in {cameraRollDir.FullName}" );
-            return;
+      Log.Warning( $"No files found in {cameraRollDir.FullName}" );
+     return;
         }
-        Log.Information( $"{files.Length:N0} files found in {cameraRollDir.FullName}" );
+      Log.Information( $"{files.Length:N0} files found in {cameraRollDir.FullName}" );
 
         // Process all the files found in the folder
         await Files_Process( files );
@@ -778,35 +783,34 @@ public partial class HelperLib
         Log.Information( "Finished processing files" );
     }
 
-    public async static void Takeout_MoveNoDb(DirectoryInfo sourceFolder, bool verbose)
+    public async static Task Takeout_MoveNoDb(DirectoryInfo sourceFolder, bool verbose)
     {
-        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
+     using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
 
         Log.Information( $"Starting, processing folder [{sourceFolder}] with verbose: {verbose}" );
 
         // Create a list of all files in the source folder
         FileInfo[] files = sourceFolder.GetFiles( "*", SearchOption.AllDirectories );
-        if ( files.Length == 0 )
+   if ( files.Length == 0 )
         {
-            Log.Warning( $"No files found in {sourceFolder.FullName}" );
-            return;
-        }
+    Log.Warning( $"No files found in {sourceFolder.FullName}" );
+          return;
+      }
         Log.Information( $"{files.Length:N0} files found in {sourceFolder.FullName}" );
 
         // Process all the files found in the folder
-        await Files_Process( files );
+ await Files_Process( files );
 
-        Log.Information( "Finished processing files" );
+    Log.Information( "Finished processing files" );
     }
-
 
     private static async Task Files_Process(FileInfo[] files)
     {
-        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
 
-        int processedCount = 0, movedCount = 0, deleteCount = 0;
+        int processedCount = 0, movedCount = 0, extensionNotRecognisedCount = 0, deleteCount = 0;
         long startTimeStemp = Stopwatch.GetTimestamp();
-        StringBuilder sb = new("List of new files added\n");
+        StringBuilder sb = new( "List of new files added\n" );
 
         // Validate that configuration is available
         if ( _config is null )
@@ -820,20 +824,29 @@ public partial class HelperLib
             throw new Exception( $"OneDriveFolders not found in appsettings.json for machine: {Environment.MachineName}" );
 
         Log.Debug( $"Photos target folder: {photosTarget}, Videos target folder: {videosTarget}" );
-        Log.Information( $"Processing {files.Length:N0} files" );
 
         // Iterate through each file and process it
         foreach ( FileInfo file in files )
         {
             processedCount++;
+            if ( processedCount % 1_000 == 0 ) Log.Information( $"Processed: \t{processedCount:N0},\tmovedCount:\t{movedCount:N0} files\n" );
+
             try
             {
+                string fileExtension = file.Extension.ToUpper();
+
+                if ( fileExtension == ".JSON" )
+                {
+                    // Skip JSON files
+                    continue;
+                }
+
                 // Check if file extension matches the media type
-                var type = _fileExtensionTypes.Find( e => e.Type == file.Extension.ToUpper() );
+                var type = _fileExtensionTypes.Find( e => e.Type == fileExtension );
                 if ( type is null )
                 {
-                    deleteCount++;
-                    Log.Warning( $"File extension: {file.Extension} not found in fileExtensionTypes for file {file.FullName}." );
+                    extensionNotRecognisedCount++;
+                    Log.Warning( $"File extension: [{fileExtension}] not found in fileExtensionTypes, file {file.FullName}." );
                     continue;
                 }
 
@@ -845,7 +858,7 @@ public partial class HelperLib
                 // If no valid creation date found, log and skip the file
                 if ( createDateTime is null )
                 {
-                    deleteCount++;
+                    extensionNotRecognisedCount++;
                     Log.Warning( $"No valid creation date found for {file.FullName}" );
                     continue;
                 }
@@ -879,14 +892,13 @@ public partial class HelperLib
                 file.MoveTo( targetFile, overwrite: true );
                 sb.AppendLine( $"{file.FullName} moved to {targetFile}" );
                 movedCount++;
-                if ( processedCount % 1000 == 0 ) Log.Information( $"Processed: \t{processedCount:N0} files" );
             }
             catch ( Exception ex )
             {
-                deleteCount++;
+                extensionNotRecognisedCount++;
                 Log.Error( ex, $"Error processing file: {file.FullName}" );
             }
-        }
+        } // end foreach file
 
         #region Old Parallel Code
         //var parallel = Parallel.ForEach( files, file =>
@@ -898,7 +910,7 @@ public partial class HelperLib
         //        var type = _fileExtensionTypes.Find( e => e.Type == file.Extension.ToUpper() );
         //        if ( type is null )
         //        {
-        //            Interlocked.Increment( ref deleteCount );
+        //            Interlocked.Increment( ref extensionNotRecognisedCount );
         //            return;
         //        }
 
@@ -906,7 +918,7 @@ public partial class HelperLib
         //        string createDateString = CreateDate_Extract( file.FullName );
         //        if ( string.IsNullOrEmpty( createDateString ) || !DateTime.TryParse( createDateString, out DateTime createDateTime ) )
         //        {
-        //            Interlocked.Increment( ref deleteCount );
+        //            Interlocked.Increment( ref extensionNotRecognisedCount );
         //            Log.Warning( $"No valid date found for {file.FullName}" );
         //            return;
         //        }
@@ -928,7 +940,7 @@ public partial class HelperLib
         //    }
         //    catch ( Exception ex )
         //    {
-        //        Interlocked.Increment( ref deleteCount );
+        //        Interlocked.Increment( ref extensionNotRecognisedCount );
         //        Log.Error( ex, $"Error processing file: {file.FullName}" );
         //    }
         //} );
@@ -938,18 +950,44 @@ public partial class HelperLib
         double elapsedTime = (endTimeStemp - startTimeStemp) * (1.0 / Stopwatch.Frequency);
         Log.Information( $"All files loaded in {elapsedTime:N0} secs." );
 
-        Log.Information( $"Completed processing. processed: {processedCount:N0}, new files added: {movedCount:N0}, deleted: {deleteCount:N0}" );
+        Log.Information( $"Completed processing. Processed: {processedCount:N0}, New files added: {movedCount:N0}, Deleted: {deleteCount:N0}" );
 
         // write stringbuilder sb to a file
-        string newFilesPath = Path.Combine( photosTarget, $"Takeout_MoveNoDb_New_Files_{DateTime.Now:yyyy-mm-dd}.txt" );
+        string newFilesPath = Path.Combine( photosTarget, $"Takeout_MoveNoDb_New_Files_{DateTime.Now:yyyy-MM-dd}.txt" );
         await File.WriteAllTextAsync( newFilesPath, sb.ToString() );
-        List<string> attachmentPaths = new() { newFilesPath };
+        List<string> attachmentPaths = [newFilesPath];  // File path for the list of new files added
 
-        await SendEmailWithAttachmentsAsync("alannevill@gmail.com",
-            "Takeout_MoveNoDb Completed",
-            $"<p>Processed: {processedCount:N0} files.<br/>New files added: {movedCount:N0}.<br/>Deleted: {deleteCount:N0}.</p>",
-            attachmentPaths: attachmentPaths,
-            bodyText: $"Processed: {processedCount:N0} files.\nNew files added: {movedCount:N0}.\nDeleted: {deleteCount:N0}." );
+        long result = 0;
+        try
+        {
+      Log.Information( $"Attempting to send email notification. Moved: {movedCount}, Deleted: {deleteCount}" );
+  
+          // send email with attached list of new files added
+  result = await SendEmailWithAttachmentsAsync(
+        "alannevill@gmail.com",
+          "Takeout_MoveNoDb Completed",
+  $"<p>Processed: {processedCount:N0} files.<br/>New files added: {movedCount:N0}.<br/>Deleted: {deleteCount:N0}.<br/>Took {elapsedTime:N0} seconds</p>",
+       attachmentPaths: attachmentPaths,
+        bodyText: $"Processed: {processedCount:N0} files.\nNew files added: {movedCount:N0}.\nDeleted: {deleteCount:N0}.",
+  1
+            );
+
+          Log.Information( $"SendEmailWithAttachmentsAsync returned result: {result}" );
+        }
+        catch ( Exception exc)
+        {
+     Log.Fatal( exc, "Exception sending email notification for Takeout_MoveNoDb." );
+     throw;
+        }
+
+        if ( result <= 0 )
+   {
+  Log.Error( $"Failed to send email notification for Takeout_MoveNoDb. Result code: {result}" );
+        }
+        else
+        {
+      Log.Information( $"Email notification for Takeout_MoveNoDb sent successfully as message Id: {result}." );
+        }
     }
 
     public static async Task<long> SendEmailWithAttachmentsAsync(
@@ -960,27 +998,24 @@ public partial class HelperLib
        string? bodyText = null,
        int priority = 1)
     {
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
         try
         {
-            if ( Program._serviceProvider == null )
+            if ( _emailerClient == null )
             {
-                Log.Error( "HelperLib.SendEmailWithAttachmentsAsync - Service provider not initialized." );
+                Log.Error( "EmailerClient not initialized. Ensure HelperLib constructor has been called." );
                 return -1;
             }
 
-            var emailerClient = Program._serviceProvider.GetService<EmailerUtility.IEmailerClient>();
-            if ( emailerClient == null )
-            {
-                Log.Error( "HelperLib.SendEmailWithAttachmentsAsync - EmailerClient not available." );
-                return -1;
-            }
+            Log.Information( "Using EmailerClient from HelperLib instance..." );
 
             // Create attachment records
             var attachments = attachmentPaths.Select( path =>
-                new EmailerUtility.Models.Records.EmailAttachmentRec { FilePathAndName = path }
-            ).ToList();
+            new EmailerUtility.Models.Records.EmailAttachmentRec { FilePathAndName = path } ).ToList();
 
-            var messageId = await emailerClient.EnqueueAsync(
+        Log.Information( $"Calling EnqueueAsync for email to {toAddress} with {attachments.Count} attachments..." );
+
+        var messageId = await _emailerClient.EnqueueAsync(
                 toAddress: toAddress,
                 subject: subject,
                 bodyHtml: bodyHtml,
@@ -989,15 +1024,15 @@ public partial class HelperLib
                 scheduledAtUtc: null,
                 recipients: null,
                 attachments: attachments,
-                fromAddress: Program._config?["EmailerUtility:DefaultFromAddress"] ?? "noreply@DupesMaint2.local"
-            );
+                fromAddress: "noreply@DupesMaint2.local"
+        );
 
-            Log.Information( $"HelperLib.SendEmailWithAttachmentsAsync - Email with {attachments.Count} attachments queued. MessageId: {messageId}" );
+            Log.Information( $"Email with {attachments.Count} attachments queued. MessageId: {messageId}" );
             return messageId;
         }
         catch ( Exception exc )
         {
-            Log.Error( exc, $"HelperLib.SendEmailWithAttachmentsAsync - Failed to send email with attachments. To: {toAddress}" );
+            Log.Error( exc, $"Failed to send email with attachments. To: {toAddress}" );
             return -1;
         }
     }
@@ -1005,7 +1040,7 @@ public partial class HelperLib
 
     private static DateTime? CreateDate_FromFileName(string fullName)
     {
-        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
 
         // get the date from the file name - Try 1. YYYYMMDD format
         Regex regex1 = new( @"(?<year>19\d{2}|20\d{2})(?<month>0\d|1\d)(?<day>0\d|1\d|2\d|3[0,1])" );
@@ -1117,7 +1152,7 @@ public partial class HelperLib
 
     private static DateTime? CreateDate_Extract(string fileFullName, FileExtensionTypes type)
     {
-        using var scope = BeginningMethodScopeLocal(); // Automatically uses method name for logging
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
 
         // Extract the EXIF directories of the image file
         var directories = GetMetadata( fileFullName );
@@ -1155,10 +1190,15 @@ public partial class HelperLib
                 string? _sCreateDateTime = _QuickTimeDirectory.GetDescription( QuickTimeMovieHeaderDirectory.TagCreated );
                 if ( !string.IsNullOrEmpty( _sCreateDateTime ) )
                 {
-                    DateTime? _CreateDateTime = null;
                     try
                     {
-                        _CreateDateTime = DateTime.ParseExact( _sCreateDateTime, "ddd MMM dd HH:mm:ss yyyy", CultureInfo.InvariantCulture );
+                        bool isParsed = DateTime.TryParseExact( _sCreateDateTime, "ddd MMM dd HH:mm:ss yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None,out DateTime dtParsed );
+                        if( isParsed ) return dtParsed;
+
+                        isParsed = DateTime.TryParseExact( _sCreateDateTime, "ddd MMMM dd HH:mm:ss yyyy", CultureInfo.InvariantCulture, DateTimeStyles.None, out dtParsed );
+                        if( isParsed ) return dtParsed;
+
+                        return null;
                     }
                     catch ( Exception exc )
                     {
@@ -1166,11 +1206,6 @@ public partial class HelperLib
                         return null;
                     }
 
-                    if ( _CreateDateTime is not null )
-                    {
-                        Log.Information( $"type.Group: {type.Group}, file: {fileFullName}, date: {_CreateDateTime}" );
-                        return _CreateDateTime;
-                    }
                 }
             }
         }
@@ -1320,7 +1355,7 @@ public partial class HelperLib
 
         directories.Add( new FileMetadataReader().Read( filePath ) );
 
-        Log.Information( $"Found {directories.Count} directories for file: {filePath}" );
+        //Log.Information( $"Found {directories.Count} directories for file: {filePath}" );
         return directories;
     }
 
@@ -1411,14 +1446,14 @@ public partial class HelperLib
             sw.WriteLine( "HashValue,CheckSumId1,Filename1,CheckSumId2,Filename2,1or2" );
 
             // Get the list of files to process
-            List<VCheckSumBasedOnGroup> vCheckSumBasedOnGroup = photosCtx!.VCheckSumBasedOnGroup.Where( a => a.TheCount == 2 && a.DupBasedOn == "Sha" ).ToList();
+            List<VCheckSumBasedOnGroup> vCheckSumBasedOnGroup = _photosCtx!.VCheckSumBasedOnGroup.Where( a => a.TheCount == 2 && a.DupBasedOn == "Sha" ).ToList();
             Log.Information( $"TrainingCSV - vCheckSumBasedOnGroup.Count: {vCheckSumBasedOnGroup.Count:N0}" );
 
             // Loop through the duplicate Sha values getting the CheckSum rows
             foreach ( var ShaDup in vCheckSumBasedOnGroup )
             {
                 // Get the CheckSum rows for the Sha value
-                List<CheckSum> checkSums = photosCtx!.CheckSum.Where( a => a.Sha == ShaDup.BasedOnVal ).ToList();
+                List<CheckSum> checkSums = _photosCtx!.CheckSum.Where( a => a.Sha == ShaDup.BasedOnVal ).ToList();
 
                 // this should return a list of 2 CheckSum rows
                 if ( checkSums.Count != 2 )
@@ -1455,7 +1490,7 @@ public partial class HelperLib
         Log.Information( $"PerceptualHashCSV - Writing CSV file: {csvFile}" );
 
         // read all CheckSum into a list in memory
-        List<CheckSum> allCheckSums = photosCtx!.CheckSum.ToList();
+        List<CheckSum> allCheckSums = _photosCtx!.CheckSum.ToList();
         Log.Information( $"PerceptualHashCSV - read all CheckSum into a list: {allCheckSums.Count:N0}, {stopwatch.ElapsedMilliseconds:N0} ms" );
 
         using ( StreamWriter sw = new( csvFile ) )
@@ -1464,7 +1499,7 @@ public partial class HelperLib
             sw.WriteLine( "HashValue,CheckSumId1,Filename1,CheckSumId2,Filename2,Action" );
 
             // Get a list of perceptual hashes where count(*) = 2
-            var query = from p in photosCtx!.Set<CheckSum>()
+            var query = from p in _photosCtx!.Set<CheckSum>()
                         group p by p.PerceptualHash
                         into g
                         where g.Count() == 2
@@ -1483,7 +1518,7 @@ public partial class HelperLib
 
                 // Get the CheckSum rows for the PerceptualHash.Key value from the list of allCheckSums in memory
                 List<CheckSum> checkSums = allCheckSums.Where( a => a.PerceptualHash == PerceptualHash.Key ).ToList();
-                //List<CheckSum> checkSums = photosCtx!.CheckSum.Where(a => a.PerceptualHash == PerceptualHash.Key).ToList();
+                //List<CheckSum> checkSums = _photosCtx!.CheckSum.Where(a => a.PerceptualHash == PerceptualHash.Key).ToList();
 
                 // this should return a list of 2 CheckSum rows
                 if ( checkSums.Count != 2 )
@@ -1590,7 +1625,7 @@ public partial class HelperLib
                 int checkSumId = (ToDelete == "1") ? int.Parse( CheckSumId1 ) : int.Parse( CheckSumId2 );
 
                 // Get the CheckSum row
-                CheckSum checkSum = photosCtx!.CheckSum.Find( checkSumId )!;
+                CheckSum checkSum = _photosCtx!.CheckSum.Find( checkSumId )!;
                 if ( checkSum is null )
                 {
                     Log.Fatal( $"ShaDelete - CheckSumId {checkSumId} not found" );
@@ -1601,7 +1636,7 @@ public partial class HelperLib
                 File.Delete( checkSum.FileFullName );
 
                 // Delete the CheckSum row
-                photosCtx.CheckSum.Remove( checkSum );
+                _photosCtx.CheckSum.Remove( checkSum );
 
                 if ( verbose ) Log.Information( $"ShaDelete - Deleting, CheckSum id: {checkSum.Id}: checkSum.FileFullName: {checkSum.FileFullName}" );
             }
@@ -1613,7 +1648,7 @@ public partial class HelperLib
         }
 
         // Save the changes
-        photosCtx!.SaveChanges();
+        _photosCtx!.SaveChanges();
         Log.Information( $"ShaDelete - Finished, lines.Count: {lines.Count:N0}" );
     }
 
@@ -1626,11 +1661,22 @@ public partial class HelperLib
     public static IDisposable BeginningMethodScopeLocal([CallerMemberName] string methodName = "")
     {
         // Create a combined scope with both SourceContext and MethodName
-        var sourceScope = Serilog.Context.LogContext.PushProperty( "SourceContext", "FinRite.FinRiteLib" );
+        var sourceScope = Serilog.Context.LogContext.PushProperty( "SourceContext", "DupesMaint2" );
         var methodScope = Serilog.Context.LogContext.PushProperty( "MethodName", methodName );
 
         // Return a combined disposable that disposes both scopes
         return new CombinedDisposable( sourceScope, methodScope );
+    }
+
+    /// <summary>
+    /// Helper method to create class and method-named scopes for logging throughout the application
+    /// </summary>
+    /// <param name="methodName">Automatically captured method name</param>
+    /// <returns>IDisposable scope that includes the method name in logs</returns>
+    public static IDisposable Scope<T>([CallerMemberName] string methodName = "")
+    {
+        var sourceContext = $"{typeof( T ).Name}.{methodName}";
+        return Serilog.Context.LogContext.PushProperty( "MethodName", sourceContext );
     }
 
     /// <summary>

@@ -1,6 +1,7 @@
 ﻿using DupesMaint2.Models;
 
 using EmailerUtility;
+using EmailerUtility.DependencyInjection;
 using EmailerUtility.Models;
 
 using Microsoft.Data.SqlClient;
@@ -31,6 +32,11 @@ internal class Program
         // set up the configuration
         BuildConfig();
 
+        if (_config == null )
+        {
+            throw new InvalidOperationException( "_config is null in Program.Main" );
+        }
+
         // dependency injection
         var host = Host.CreateDefaultBuilder()
             .ConfigureServices( (context, services) =>
@@ -39,18 +45,11 @@ internal class Program
                 {
                     options.UseSqlServer( _cnStr );
                 } );
-                
-                // Register EmailerUtility services
-                // First register the EmailerDb context
-                services.AddDbContext<EmailerDb>( options =>
-                {
-                    // Use the connection string from configuration for EmailerUtility
-                    var emailerConnectionString = _config.GetConnectionString( "EmailerDb" ) ?? _cnStr;
-                    options.UseSqlServer( emailerConnectionString );
-                } );
-                
-                // Register the EmailerClient
-                services.AddScoped<IEmailerClient, EmailerClient>();
+
+                // EmailerUtility registration (uses ConnectionStrings:Emailer automatically which is defined as an environment variable)
+                services.AddEmailerUtility( context.Configuration );
+                // Explicit registration for concrete EmailerClient
+                services.AddTransient<EmailerUtility.EmailerClient>();
                 
                 services.AddSingleton<HelperLib, HelperLib>();
             } )
@@ -126,7 +125,7 @@ internal class Program
         {
             verbose
         };
-        command4a.SetHandler( (verbose) => { HelperLib.CameraRoll_MoveNoDb( verbose ); },  verbose );
+        command4a.SetHandler( async (verbose) => { await HelperLib.CameraRoll_MoveNoDb( verbose ); },  verbose );
         rootCommand.AddCommand( command4a );
         #endregion
 
@@ -138,7 +137,7 @@ internal class Program
             folder,
             verbose
         };
-        command4b.SetHandler( (folder, verbose) => { HelperLib.Takeout_MoveNoDb( folder, verbose ); }, folder, verbose );
+        command4b.SetHandler( async (folder, verbose) => { await HelperLib.Takeout_MoveNoDb( folder, verbose ); }, folder, verbose );
         rootCommand.AddCommand( command4b );
         #endregion
 
@@ -208,6 +207,18 @@ internal class Program
         rootCommand.AddCommand( command10 );
         #endregion
 
+        // Command11 - Test enqueueing an email
+        #region "subcommand11 TestEmail
+        Command command11 = new( "TestEmail", "Test enqueing an email." ) {};
+        command11.SetHandler( async () => { await HelperLib.SendEmailWithAttachmentsAsync(
+            "alannevill@gmail.com",
+            "DupesMaint2 test email",
+            "<h3>Test email </h3>",
+            [],
+            "Test email",
+            1); } );
+        rootCommand.AddCommand( command11 );
+        #endregion
 
         // call the method defined in the handler
         try
@@ -220,7 +231,7 @@ internal class Program
         }
         finally
         {
-            Log.Information( "Finished" );
+            Log.Information( "Finished\n" );
             Log.CloseAndFlush();
         }
         return 0;

@@ -2,7 +2,7 @@
   "profiles": {
     "DupesMaint2": {
       "commandName": "Project",
-      "commandLineArgs": "CameraRoll_MoveNoDb --verbose true"
+      "commandLineArgs": "Takeout_MoveNoDb --folder E:\\Woo_2025-10-18"
     }
   }
 }
