@@ -801,26 +801,26 @@ public partial class HelperLib
 
         // Create a list of all files in the source folder
         FileInfo[] files = sourceFolder.GetFiles( "*", SearchOption.AllDirectories );
-       if ( files.Length == 0 )
-       {
+        if ( files.Length == 0 )
+        {
             Log.Warning( $"No files found in {sourceFolder.FullName}" );
             return;
-       }
+        }
         Log.Information( $"{files.Length:N0} files found in {sourceFolder.FullName}" );
 
-        // Process all the files found in the folder
-        await Files_Process( files );
+        // Process all the files found in the folder tree
+        await Files_Process( files, verbose );
 
         Log.Information( "Finished processing files" );
     }
 
-    private static async Task Files_Process(FileInfo[] files)
+    private static async Task Files_Process(FileInfo[] files, bool verbose = false)
     {
         using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
 
-        int processedCount = 0, movedCount = 0, extensionNotRecognisedCount = 0, deleteCount = 0;
+        int processedCount = 0, movedCount = 0, extensionNotRecognisedCount = 0, deleteCount = 0, sameNameDifferentSizeCount=0;
         long startTimeStemp = Stopwatch.GetTimestamp();
-        StringBuilder sb = new( "List of new files added\n" );
+        StringBuilder sb = new( "List of new files added:\n" );
 
         // Validate that configuration is available
         if ( _config is null )
@@ -887,19 +887,32 @@ public partial class HelperLib
                 }
 
                 string targetFile = Path.Combine( targetFolder, file.Name );
+
+                // Check if the file already exists at the target location
                 if ( File.Exists( targetFile ) )
                 {
-                    deleteCount++;
-                    File.Delete( file.FullName );
-                    Log.Warning( $"File already exists at target location: {targetFolder}, deleting file: {file.FullName}" );
-                    continue;
+                    // Compare the file sizes to decide whether the file already exists or just the same name
+                    FileInfo targetFileInfo = new( targetFile );
+                    if ( targetFileInfo.Length == file.Length )
+                    {
+                        // File already exists, delete the source file
+                        deleteCount++;
+                        File.Delete( file.FullName );
+                        if(verbose) Log.Warning( $"File already exists at target location: {targetFolder}, deleting source file: {file.FullName}" );
+                        continue;
+                    }
+                    else
+                    {
+                        sameNameDifferentSizeCount++;
+                        Log.Warning( $"File with same name but different size exists at target location: {targetFolder}. Source file: {file.FullName}, Source size: {file.Length:N0}, Target size: {targetFileInfo.Length:N0}" );
+                    }
                 }
 
                 // Create target directory if it doesn't exist
                 System.IO.Directory.CreateDirectory( targetFolder );
 
                 // Move the file
-                file.MoveTo( targetFile, overwrite: true );
+                file.MoveTo( targetFile, overwrite: false );
                 sb.AppendLine( $"{file.FullName} moved to {targetFile}" );
                 movedCount++;
             }
@@ -960,7 +973,7 @@ public partial class HelperLib
         double elapsedTime = (endTimeStemp - startTimeStemp) * (1.0 / Stopwatch.Frequency);
         Log.Information( $"All files loaded in {elapsedTime:N0} secs." );
 
-        Log.Information( $"Completed processing. Processed: {processedCount:N0}, New files added: {movedCount:N0}, Deleted: {deleteCount:N0}" );
+        Log.Information( $"Completed processing. Processed: {processedCount:N0}, New files added: {movedCount:N0}, Deleted: {deleteCount:N0}, sameNameDifferentSizeCount: {sameNameDifferentSizeCount:N0}" );
 
         // write stringbuilder sb to a file
         string newFilesPath = Path.Combine( photosTarget, $"Takeout_MoveNoDb_New_Files_{DateTime.Now:yyyy-MM-dd}.txt" );
@@ -1047,7 +1060,18 @@ public partial class HelperLib
         }
     }
 
-
+    /// <summary>
+    /// Attempts to extract a creation date from the specified file name or its containing folder using several common
+    /// date patterns.
+    /// </summary>
+    /// <remarks>This method checks for date patterns in both the file name and its parent folder, including
+    /// formats such as 'YYYYMMDD', 'YYYY-MM-DD', 'YYYY-MM', and folder names like 'Photos from YYYY'. If multiple
+    /// patterns are present, the first matching pattern is used. The returned date always has the time component set to
+    /// 23:59:59 to represent the end of the day.</remarks>
+    /// <param name="fullName">The full path or name of the file from which to attempt to determine the creation date. This may include date
+    /// information in the file name or in the folder structure.</param>
+    /// <returns>A DateTime value representing the extracted creation date, with the time set to 23:59:59, if a recognizable date
+    /// pattern is found; otherwise, null.</returns>
     private static DateTime? CreateDate_FromFileName(string fullName)
     {
         using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
@@ -1160,6 +1184,16 @@ public partial class HelperLib
         return null;
     }
 
+    /// <summary>
+    /// Extracts the creation date and time from the metadata of a photo or video file, if available.
+    /// </summary>
+    /// <remarks>For photo files, the method attempts to extract the 'DateTimeOriginal' tag from EXIF
+    /// metadata. For video files, it looks for the creation date in QuickTime metadata. If the relevant metadata is
+    /// missing or cannot be parsed, the method returns null.</remarks>
+    /// <param name="fileFullName">The full path to the file from which to extract the creation date. Must refer to a valid photo or video file.</param>
+    /// <param name="type">The file extension type, which determines how the metadata is processed and which metadata tags are used.</param>
+    /// <returns>A DateTime value representing the creation date and time extracted from the file's metadata, or null if the
+    /// creation date cannot be determined.</returns>
     private static DateTime? CreateDate_Extract(string fileFullName, FileExtensionTypes type)
     {
         using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
@@ -1319,22 +1353,6 @@ public partial class HelperLib
     }
 
 
-    /// <summary>
-    /// Initialise Serilog
-    /// </summary>
-    public static void SerilogSetup()
-    {
-
-        // Ensure the log promintently shows the database being used
-        var CnStr = new SqlConnectionStringBuilder( ConnectionString );
-
-        // Log the assembly version number
-        string assemblyVersion = Assembly.GetExecutingAssembly().GetName().Version!.ToString();
-        Log.Information( new String( '=', 60 ) );
-        Log.Information( $"DupesMaint2 v{assemblyVersion} - starting using DATABASE: {CnStr.InitialCatalog.ToUpper()}" );
-        Log.Information( new String( '=', 60 ) );
-    }
-
     private static Stream GetStream(FileInfo fileInfo)
     {
         if ( fileInfo.Exists )
@@ -1371,7 +1389,7 @@ public partial class HelperLib
 
 
     /// <summary>Reads metadata from an <see cref="Stream"/>
-    /// Depending on the FileTpe found in the stream</summary>
+    /// Depending on the FileType found in the stream</summary>
     /// <param name="stream">A stream from which the file data may be read.  The stream must be positioned at the beginning of the file's data.</param>
     /// <returns>A list of <see cref="Directory"/> instances containing the various types of metadata found within the file's data.</returns>
     /// <exception cref="ImageProcessingException">The file type is unknown, or processing errors occurred.</exception>
@@ -1490,6 +1508,16 @@ public partial class HelperLib
         Log.Information( $"TrainingCSV - Finished writing CSV file: {csvFile}" );
     }
 
+    /// <summary>
+    /// Generates a CSV report of duplicate perceptual hashes found in the photo database, including file and action
+    /// details for each pair.
+    /// </summary>
+    /// <remarks>The generated CSV file is saved in the user's Documents\DupesMaint2 directory and contains
+    /// pairs of files sharing the same perceptual hash. Each row includes hash value, file identifiers, filenames, and
+    /// an action code indicating the relationship between the files. This method is intended for maintenance and
+    /// analysis of duplicate images based on perceptual hashing.</remarks>
+    /// <param name="verbose">Indicates whether to log progress information during CSV generation. Set to <see langword="true"/> to enable
+    /// periodic status updates; otherwise, progress is not logged.</param>
     internal static void PerceptualHashCSV(bool verbose)
     {
         using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
@@ -1680,24 +1708,4 @@ public partial class HelperLib
         return Serilog.Context.LogContext.PushProperty( "MethodName", methodName );
     }
 
-    /// <summary>
-    /// Helper class to dispose multiple IDisposable objects
-    /// </summary>
-    //private class CombinedDisposable : IDisposable
-    //{
-    //    private readonly IDisposable[] _disposables;
-
-    //    public CombinedDisposable(params IDisposable[] disposables)
-    //    {
-    //        _disposables = disposables;
-    //    }
-
-    //    public void Dispose()
-    //    {
-    //        foreach ( var disposable in _disposables )
-    //        {
-    //            disposable?.Dispose();
-    //        }
-    //    }
-    //}
 }

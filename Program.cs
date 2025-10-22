@@ -1,15 +1,12 @@
 ﻿using DupesMaint2.Models;
 
-using EmailerUtility;
 using EmailerUtility.DependencyInjection;
-using EmailerUtility.Models;
 
 using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 
 using Serilog;
 
@@ -32,7 +29,7 @@ internal class Program
         // set up the configuration
         BuildConfig();
 
-        if (_config == null )
+        if ( _config == null )
         {
             throw new InvalidOperationException( "_config is null in Program.Main" );
         }
@@ -50,7 +47,7 @@ internal class Program
                 services.AddEmailerUtility( context.Configuration );
                 // Explicit registration for concrete EmailerClient
                 services.AddTransient<EmailerUtility.EmailerClient>();
-                
+
                 services.AddSingleton<HelperLib, HelperLib>();
             } )
             .Build();
@@ -125,7 +122,7 @@ internal class Program
         {
             verbose
         };
-        command4a.SetHandler( async (verbose) => { await HelperLib.CameraRoll_MoveNoDb( verbose ); },  verbose );
+        command4a.SetHandler( async (verbose) => { await HelperLib.CameraRoll_MoveNoDb( verbose ); }, verbose );
         rootCommand.AddCommand( command4a );
         #endregion
 
@@ -209,14 +206,17 @@ internal class Program
 
         // Command11 - Test enqueueing an email
         #region "subcommand11 TestEmail
-        Command command11 = new( "TestEmail", "Test enqueing an email." ) {};
-        command11.SetHandler( async () => { await HelperLib.SendEmailWithAttachmentsAsync(
+        Command command11 = new( "TestEmail", "Test enqueing an email." ) { };
+        command11.SetHandler( async () =>
+        {
+            await HelperLib.SendEmailWithAttachmentsAsync(
             "alannevill@gmail.com",
             "DupesMaint2 test email",
             "<h3>Test email </h3>",
             [],
             "Test email",
-            1); } );
+            1 );
+        } );
         rootCommand.AddCommand( command11 );
         #endregion
 
