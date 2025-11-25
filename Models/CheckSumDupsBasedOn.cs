@@ -7,14 +7,15 @@ namespace DupesMaint2.Models;
 [PrimaryKey("CheckSumId", "DupBasedOn")]
 public partial class CheckSumDupsBasedOn
 {
-    [Key]
-    public int CheckSumId { get; set; }
-
-    [Key]
+    [Required]
     [StringLength(20)]
     [Unicode(false)]
     public string DupBasedOn { get; set; } = null!;
 
+    [Required]
+    public int CheckSumId { get; set; }
+
+    [Required]
     [StringLength(200)]
     [Unicode(false)]
     public string BasedOnVal { get; set; } = null!;

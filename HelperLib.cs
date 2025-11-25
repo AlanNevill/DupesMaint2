@@ -257,13 +257,13 @@ public partial class HelperLib
                     return;
                 }
 
-                var type = _fileExtensionTypes2Hashing.Find( e => e.Type == checkSum.FileExt );
-                if ( type is null )
-                {
-                    Interlocked.Increment( ref dropCount );
-                    Log.Warning( $"CalculateHashes - id: {checkSum.Id}, checkSum.FileExt not found in _fileExtensionTypes2Hashing, checkSum.FileExt: {checkSum.FileExt}" );
-                    return;
-                }
+                //var type = _fileExtensionTypes2Hashing.Find( e => e.Type == checkSum.FileExt );
+                //if ( type is null )
+                //{
+                //    Interlocked.Increment( ref dropCount );
+                //    Log.Warning( $"CalculateHashes - id: {checkSum.Id}, checkSum.FileExt not found in _fileExtensionTypes2Hashing, checkSum.FileExt: {checkSum.FileExt}" );
+                //    return;
+                //}
 
                 // type can have hashes calculated
                 //string fileFullName = Environment.MachineName == "WILLBOT" ? checkSum.FileFullName.Replace( "\\User\\", "\\Pops\\" ) : checkSum.FileFullName;
@@ -331,16 +331,17 @@ public partial class HelperLib
 
         } ); // end of Parallel.ForEach
 
+
         // update the database
         _photosCtx!.SaveChanges();
 
-        _stopwatch.Stop();
 
+        _stopwatch.Stop();
         Log.Information( $"""
 		CalculateHashes - Finished processing
 				parallel.ToString:	{parallel}
 				allCheckSums.Count:	{_photosCtx.CheckSum.LongCount():N0}
-				movedCount:		{processedCount:N0}
+				processedCount:		{processedCount:N0}
 				extensionNotRecognisedCount:			{dropCount:N0}
 				execution time:		{_stopwatch.Elapsed.TotalMinutes:N1} mins
 		{new String( '-', 132 )}
@@ -485,6 +486,10 @@ public partial class HelperLib
 			verbose:	{verbose}
 		""" );
 
+        // Clear down the target table
+        using IDbConnection db = new SqlConnection( HelperLib.ConnectionString );
+        db.Execute( "truncate table dbo.CheckSumDupsBasedOn" );
+
         int processedCount = 0, insertCheckSumDupsBasedOnCount = 0;
         object anonymousHash;
 
@@ -515,7 +520,7 @@ public partial class HelperLib
         {
             if ( verbose ) Log.Information( $"FindDupsUsingHash - theHash.hashVal: {theHash.hashVal}, {theHash.Count}" );
 
-            // get a collection of CheckSums from the rows with this theHash value
+            // get a collection of CheckSums from the rows with this Hash value
             List<CheckSum> checkSums;
             switch ( hashType )
             {
@@ -535,28 +540,68 @@ public partial class HelperLib
             // process the collection of CheckSum ids
             foreach ( CheckSum checkSum in checkSums )
             {
-                CheckSumDupsBasedOn checkSumDupsBasedOn_Exists = checkSum.CheckSumDupsBasedOn.FirstOrDefault( a => a.BasedOnVal == theHash.hashVal )!;
+                bool checkSumDupsBasedOn_Exists = checkSum.CheckSumDupsBasedOn.Any( a => a.BasedOnVal == theHash.hashVal )!;
 
                 // if the CheckSumDupsbasedOn does not exist then add it.
-                if ( checkSumDupsBasedOn_Exists is null )
+                if ( checkSumDupsBasedOn_Exists is false )
                 {
-                    CheckSumDupsBasedOn checkSumDupsBasedOn = new()
+                    try
                     {
-                        CheckSumId = checkSum.Id,
-                        DupBasedOn = hashType,
-                        BasedOnVal = theHash.hashVal.ToString()
-                    };
+                        CheckSumDupsBasedOn checkSumDupsBasedOn = new()
+                        {
+                            CheckSumId = checkSum.Id,
+                            DupBasedOn = hashType,
+                            BasedOnVal = theHash.hashVal.ToString()
+                        };
 
-                    _photosCtx.CheckSumDupsBasedOn.Add( checkSumDupsBasedOn );
-                    insertCheckSumDupsBasedOnCount++;
+                        _photosCtx.CheckSumDupsBasedOn.Add( checkSumDupsBasedOn );
+                        insertCheckSumDupsBasedOnCount++;
+
+                    }
+                    catch ( Exception exc)
+                    {
+                        Log.Fatal( exc, $"checkSumDupsBasedOn.BasedOnVal: {theHash.hashVal.ToString()}, CheckSumId: {checkSum.Id}" );
+                        throw;
+                    }
                 }
             }
 
-            if ( ++processedCount % 1000 == 0 )
+            if ( ++processedCount % 100 == 0 )
                 Log.Information( $"FindDupsUsingHash - {processedCount,6:N0}. Completed:{((processedCount * 100) / anonymousCount),3:N0}%." );
         }
 
+
+        // Find and log CheckSumDupsBasedOn rows where CheckSumId + BasedOnVal combination appears more than once
+        var duplicateEntries = from csdb in _photosCtx.CheckSumDupsBasedOn
+                               group csdb by new { csdb.CheckSumId, csdb.BasedOnVal } into g
+                               where g.Count() > 1
+                               select new
+                               {
+                                   g.Key.CheckSumId,
+                                   g.Key.BasedOnVal,
+                                   Count = g.Count(),
+                                   DupBasedOnValues = g.Select( x => x.DupBasedOn ).ToList()
+                               };
+
+        int duplicateCount = duplicateEntries.Count();
+        if ( duplicateCount > 0 )
+        {
+            Log.Warning( $"Found {duplicateCount:N0} duplicate CheckSumId+BasedOnVal combinations in CheckSumDupsBasedOn table:" );
+            
+            foreach ( var dup in duplicateEntries )
+            {
+                string dupBasedOnList = string.Join( ", ", dup.DupBasedOnValues );
+                Log.Warning( $"  CheckSumId: {dup.CheckSumId}, BasedOnVal: {dup.BasedOnVal}, Count: {dup.Count}, DupBasedOn values: [{dupBasedOnList}]" );
+            }
+        }
+        else
+        {
+            Log.Information( "No duplicate CheckSumId+BasedOnVal combinations found in CheckSumDupsBasedOn table." );
+        }
+
+        // Save changes to the database table
         _photosCtx!.SaveChanges();
+
 
         _stopwatch.Stop();
         Log.Information( $"""
@@ -904,7 +949,8 @@ public partial class HelperLib
                     else
                     {
                         sameNameDifferentSizeCount++;
-                        Log.Warning( $"File with same name but different size exists at target location: {targetFolder}. Source file: {file.FullName}, Source size: {file.Length:N0}, Target size: {targetFileInfo.Length:N0}" );
+                        Log.Warning( $"File with same name but different size exists targetFile: {targetFile}. Source file: {file.FullName}, Source size: {file.Length:N0}, Target size: {targetFileInfo.Length:N0}" );
+                        continue;
                     }
                 }
 
@@ -1218,7 +1264,7 @@ public partial class HelperLib
                         _sCreateDateTime = _sCreateDateTime[0..10].Replace( ':', '-' ) + _sCreateDateTime[10..];
                         if ( DateTime.TryParse( _sCreateDateTime, out DateTime _CreateDateTime ) )
                         {
-                            Log.Information( $"type.Group: {type.Group}, file: {fileFullName}, date: {_CreateDateTime}" );
+                            //Log.Information( $"type.Group: {type.Group}, file: {fileFullName}, date: {_CreateDateTime}" );
                             return _CreateDateTime;
                         }
                     }
@@ -1463,49 +1509,41 @@ public partial class HelperLib
 
     internal static void TrainingCSV(bool verbose)
     {
+        // Check for null 
+        if ( _photosCtx is null ) throw new NullReferenceException( "_photosCtx is null" );
+
         using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
 
+        int processedCount = 0;
+
         // Open a CSV file for writing
-        string csvFile = Path.Combine( Environment.GetFolderPath( Environment.SpecialFolder.MyDocuments ), "DupesMaint2", "Training.csv" );
+        string csvFile = Path.Combine( Environment.GetFolderPath( Environment.SpecialFolder.MyDocuments ), "DupesMaint2", "Training_2025-11-25.csv" );
 
         Log.Information( $"TrainingCSV - Writing CSV file: {csvFile}" );
 
-        using ( StreamWriter sw = new StreamWriter( csvFile ) )
+        using ( StreamWriter sw = new( csvFile , false) )   // Overwrite if exists
         {
             // Write the header
-            sw.WriteLine( "HashValue,CheckSumId1,Filename1,CheckSumId2,Filename2,1or2" );
+            sw.WriteLine( "HashValue,CheckSumId,Filename,FolderDepth,Folder" );
 
-            // Get the list of files to process
-            List<VCheckSumBasedOnGroup> vCheckSumBasedOnGroup = _photosCtx!.VCheckSumBasedOnGroup.Where( a => a.TheCount == 2 && a.DupBasedOn == "Sha" ).ToList();
-            Log.Information( $"TrainingCSV - vCheckSumBasedOnGroup.Count: {vCheckSumBasedOnGroup.Count:N0}" );
-
-            // Loop through the duplicate Sha values getting the CheckSum rows
-            foreach ( var ShaDup in vCheckSumBasedOnGroup )
+            // Loop through the duplicate Sha values getting each CheckSum row
+            foreach ( var checkSumDupsbasedOn in _photosCtx.CheckSumDupsBasedOn.ToList() )
             {
-                // Get the CheckSum rows for the Sha value
-                List<CheckSum> checkSums = _photosCtx!.CheckSum.Where( a => a.Sha == ShaDup.BasedOnVal ).ToList();
+                // Get the CheckSum rows for the CheckSumId
+                CheckSum? checkSum = _photosCtx!.CheckSum.First( a => a.Id == checkSumDupsbasedOn.CheckSumId);
 
-                // this should return a list of 2 CheckSum rows
-                if ( checkSums.Count != 2 )
-                {
-                    Log.Fatal( $"TrainingCSV - CheckSums count is {checkSums.Count} should be 2, Sha {ShaDup.BasedOnVal}" );
-                    return;
-                }
-
-                // Get the Id and FileFullName for each CheckSum row
-                int checkSumId1 = checkSums[0].Id;
-                string filename1 = checkSums[0].FileFullName;
-                int checkSumId2 = checkSums[1].Id;
-                string filename2 = checkSums[1].FileFullName;
-
-                if ( verbose ) Log.Information( $"TrainingCSV - {ShaDup.BasedOnVal} - {checkSumId1} - {filename1} - {checkSumId2} - {filename2}" );
+                // Calculate the folderDepth and store in The checkSum row column FolderDepth
+                checkSum.FolderDepth = FolderDepth( checkSum.Folder );
 
                 // Write the CSV row
-                sw.WriteLine( $"{ShaDup.BasedOnVal},{checkSumId1},{filename1},{checkSumId2},{filename2}" );
+                sw.WriteLine( $"{checkSumDupsbasedOn.BasedOnVal},{checkSum.Id},{checkSum.TheFileName.Replace(',',' ')},{checkSum.FolderDepth},{checkSum.Folder}" );
+                processedCount++;
             }
         }
 
-        Log.Information( $"TrainingCSV - Finished writing CSV file: {csvFile}" );
+        _photosCtx.SaveChanges();
+
+        Log.Information( $"TrainingCSV - Finished writing CSV file: {csvFile}, processedCount: {processedCount:N0}" );
     }
 
     /// <summary>
@@ -1560,7 +1598,7 @@ public partial class HelperLib
 
                 // Get the CheckSum rows for the PerceptualHash.Key value from the list of allCheckSums in memory
                 List<CheckSum> checkSums = allCheckSums.Where( a => a.PerceptualHash == PerceptualHash.Key ).ToList();
-                //List<CheckSum> checkSums = _photosCtx!.CheckSum.Where(a => a.PerceptualHash == PerceptualHash.Key).ToList();
+                //List<CheckSum> checkSum = _photosCtx!.CheckSum.Where(a => a.PerceptualHash == PerceptualHash.Key).ToList();
 
                 // this should return a list of 2 CheckSum rows
                 if ( checkSums.Count != 2 )
@@ -1708,4 +1746,14 @@ public partial class HelperLib
         return Serilog.Context.LogContext.PushProperty( "MethodName", methodName );
     }
 
+    internal static int FolderDepth(string folder)
+    {
+        // Check for null or empty argument
+        ArgumentException.ThrowIfNullOrEmpty(folder, nameof(folder));
+
+        // Count the number of directory separators to determine folder depth
+        return folder.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar)
+                     .Where(s => !string.IsNullOrEmpty(s))
+                     .Count();
+    }
 }

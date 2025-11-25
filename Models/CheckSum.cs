@@ -65,6 +65,8 @@ public partial class CheckSum
 
     public int? CreateMonth { get; set; }
 
+    public int? FolderDepth { get; set; }
+
 
     [InverseProperty( "CheckSum" )]
     public virtual ICollection<CheckSumDupsBasedOn> CheckSumDupsBasedOn { get; } = new List<CheckSumDupsBasedOn>();

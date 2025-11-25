@@ -41,9 +41,12 @@ namespace DupesMaint2.Models
                 entity.Property( e => e.FormatValid ).IsFixedLength();
             } );
 
-            // implement foreign kep automatic collection CheckSum owns 0,1 or many ChackSumDupsBasedOn
+            // implement foreign key automatic collection CheckSum owns 0,1 or many CheckSumDupsBasedOn
             modelBuilder.Entity<CheckSumDupsBasedOn>( entity =>
             {
+                // Define composite primary key with CheckSumId and BasedOnVal
+                entity.HasKey( e => new {  e.BasedOnVal, e.CheckSumId } );
+                
                 entity.HasOne( d => d.CheckSum )
                     .WithMany( p => p.CheckSumDupsBasedOn )
                     //.HasForeignKey(c => c.CheckSumId)

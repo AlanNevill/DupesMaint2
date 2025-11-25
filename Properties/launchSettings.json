@@ -2,7 +2,7 @@
   "profiles": {
     "DupesMaint2": {
       "commandName": "Project",
-      "commandLineArgs": "Takeout_MoveNoDb --folder E:\\Woo_2025-10-18"
+      "commandLineArgs": "Takeout_MoveNoDb --folder E:\\Alan_2025-10-21"
     }
   }
 }
