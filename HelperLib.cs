@@ -1798,7 +1798,7 @@ public partial class HelperLib
                 File.Delete( fileFullName );
             }
 
-            string message = dryRun ? "would be" : "deleted.";
+            string message = dryRun ? "would be" : "was";
             Log.Information( $"File: [{fileFullName}], {message} deleted."  );
 
         }
