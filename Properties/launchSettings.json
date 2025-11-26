@@ -2,7 +2,7 @@
   "profiles": {
     "DupesMaint2": {
       "commandName": "Project",
-      "commandLineArgs": "Takeout_MoveNoDb --folder E:\\Alan_2025-10-21"
+      "commandLineArgs": "CsvDelete --dryRun false --CSVfile \"C:\\Users\\alann\\OneDrive\\Repos\\DupesMaint2\\Temp\\Training_2025-11-25.csv\""
     }
   }
 }

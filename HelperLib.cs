@@ -37,6 +37,8 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
+using Moq;
+
 using Serilog;
 
 using System.Data;
@@ -1124,7 +1126,7 @@ public partial class HelperLib
 
         // get the date from the file name - Try 1. YYYYMMDD format
         Regex regex1 = new( @"(?<year>19\d{2}|20\d{2})(?<month>0\d|1\d)(?<day>0\d|1\d|2\d|3[0,1])" );
-        Match match1 = regex1.Match( fullName );
+        System.Text.RegularExpressions.Match match1 = regex1.Match( fullName );
         if ( match1.Success )
         {
             string year = match1.Groups["year"].Value;
@@ -1145,7 +1147,7 @@ public partial class HelperLib
 
         // get the date from the file name - try 2. Date has hypens separating year, month and day
         Regex regex2 = new( @"(?<year>19\d{2}|20\d{2})-(?<month>0\d|1\d)-(?<day>0\d|1\d|2\d|3[0,1])" );
-        Match match2 = regex2.Match( fullName );
+        System.Text.RegularExpressions.Match match2 = regex2.Match( fullName );
         if ( match2.Success )
         {
             string year = match2.Groups["year"].Value;
@@ -1165,7 +1167,7 @@ public partial class HelperLib
 
         // Try 3 - get the date from the folder where the folder path ends with yyyy-MM-dd
         Regex regex3 = new( @"(?<year>19\d{2}|20\d{2})-(?<month>0\d|1\d)-(?<day>0\d|1\d|2\d|3[0,1])$" );
-        Match match3 = regex3.Match( folderPath );
+        System.Text.RegularExpressions.Match match3 = regex3.Match( folderPath );
         if ( match3.Success )
         {
             string year = match3.Groups["year"].Value;
@@ -1182,7 +1184,7 @@ public partial class HelperLib
 
         // Try 4 - get the date from the folder where the folder path ends with yyyy-MM
         Regex regex4 = new( @"(?<year>19\d{2}|20\d{2})-(?<month>0\d|1\d)$" );
-        Match match4 = regex4.Match( folderPath );
+        System.Text.RegularExpressions.Match match4 = regex4.Match( folderPath );
         if ( match4.Success )
         {
             string year = match4.Groups["year"].Value;
@@ -1198,7 +1200,7 @@ public partial class HelperLib
 
         // Try 5 - get the date from the folder where the folder path ends with Photos from yyyy
         Regex regex5 = new( @"Photos from (?<year>19\d{2}|20\d{2})$" );
-        Match match5 = regex5.Match( folderPath );
+        System.Text.RegularExpressions.Match match5 = regex5.Match( folderPath );
         if ( match5.Success )
         {
             string year = match5.Groups["year"].Value;
@@ -1213,7 +1215,7 @@ public partial class HelperLib
 
         // Try 6 - get the date from the folder where the folder path ends with \yyyy\mm
         Regex regex6 = new( @"\\(?<year>19\d{2}|20\d{2})\\(?<month>\d{2})$" );
-        Match match6 = regex6.Match( folderPath );
+        System.Text.RegularExpressions.Match match6 = regex6.Match( folderPath );
         if ( match6.Success )
         {
             string year = match6.Groups["year"].Value;
@@ -1701,7 +1703,7 @@ public partial class HelperLib
 
         foreach ( string line in lines )
         {
-            string[] fields = line.Split( ',' );
+            string[] fields = line.Split( ',' , StringSplitOptions.TrimEntries);
             if ( fields is [string CheckSumId1, _, string CheckSumId2, _, string ToDelete] )   // 5 fields in the CSV file
             {
                 int checkSumId = (ToDelete == "1") ? int.Parse( CheckSumId1 ) : int.Parse( CheckSumId2 );
@@ -1756,4 +1758,52 @@ public partial class HelperLib
                      .Where(s => !string.IsNullOrEmpty(s))
                      .Count();
     }
+
+    /// <summary>
+    /// subCommand12
+    /// Deletes records from the specified CSV file. Supports a dry run mode to preview deletions.
+    /// </summary>
+    /// <remarks>Use dry run mode to verify which files would be deleted before performing actual deletes.
+    /// The method reads all lines from the specified file and processes each record accordingly.</remarks>
+    /// <param name="dryRun">If <see langword="true"/>, the method simulates the deletion process without deleting any files.
+    /// If <see langword="false"/>, files are deleted.</param>
+    /// <param name="CSVfile">The CSV file from which records will be deleted. Must refer to an existing file.</param>
+    public static void DeleteFromCsvFile(bool dryRun, FileInfo CSVfile)
+    {
+        using var scope = Scope<HelperLib>(); // Automatically uses method name for logging
+        Log.Information( $"dryRun: {dryRun}, CSVfile: [{CSVfile.FullName}]" );
+
+        string[] csvFile = File.ReadAllLines( CSVfile.FullName );
+        Log.Information( $"Read csvFile.Count: {csvFile.Length:N0}" );
+
+        foreach ( var line in csvFile )
+        {
+            string[] columns = line.Split( ',', StringSplitOptions.TrimEntries );
+            if ( !columns[2].Equals( "Delete", StringComparison.CurrentCultureIgnoreCase ) )
+                continue;        
+
+            // need to delete this file
+            string fileFullName = Path.Combine( columns[5], columns[3] );
+
+            // ensure that the file still exists
+            if (!File.Exists( fileFullName ) )
+            {
+                Log.Warning( $"File not longer exists (check embedded commas): [{fileFullName}]" );
+                continue;
+            }
+
+            if ( dryRun is false ) 
+            {
+                // delete the file
+                File.Delete( fileFullName );
+            }
+
+            string message = dryRun ? "would be" : "deleted.";
+            Log.Information( $"File: [{fileFullName}], {message} deleted."  );
+
+        }
+
+        Log.Information( "Finished" );
+    }
+
 }

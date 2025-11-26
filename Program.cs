@@ -74,6 +74,7 @@ internal class Program
         var PerceptualHash = new Option<bool>( "--PerceptualHash", getDefaultValue: () => false, "Calculate the PerceptualHash." ) { IsRequired = true };
         var Hash = new Option<string>( "--hash", "Hash to use: SHA, average, difference, perceptual." ).FromAmong( "Sha", "Average", "Difference", "Perceptual" );
         var CSVfile = new Option<FileInfo>( "--CSVfile", "A CSV file holding details of the CheckSum Ids to delete" ).ExistingOnly();
+        var dryRun = new Option<bool>( "--dryRun", getDefaultValue: () => true, "Just report what would be deleted (true), (false) to delete the files." ) { IsRequired = false };
 
         #region Root command	
         RootCommand rootCommand = new( "Load File Type" )
@@ -219,6 +220,16 @@ internal class Program
         } );
         rootCommand.AddCommand( command11 );
         #endregion
+
+        #region "subcommand12 Read a CSV file of delete markers and delete the file based on the Delete column.
+        Command command12 = new( "CsvDelete", "Read a CSV file of delete markers and delete the file based on the Delete column." )
+        {
+            dryRun, CSVfile
+        };
+        command12.SetHandler( (dryRun, CSVfile) => { HelperLib.DeleteFromCsvFile( dryRun, CSVfile ); }, dryRun, CSVfile );
+        rootCommand.AddCommand( command12 );
+        #endregion
+
 
         // call the method defined in the handler
         try
