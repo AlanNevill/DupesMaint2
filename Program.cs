@@ -1,4 +1,5 @@
 ﻿using DupesMaint2.Models;
+using DupesMaint2.Services;
 
 using EmailerUtility.DependencyInjection;
 
@@ -49,6 +50,7 @@ internal class Program
                 services.AddTransient<EmailerUtility.EmailerClient>();
 
                 services.AddSingleton<HelperLib, HelperLib>();
+                services.AddTransient<DelDupesViaConsoleService>();
             } )
             .Build();
 
@@ -57,6 +59,7 @@ internal class Program
 
         // set up the HelperLib service
         var svcHelperLib = ActivatorUtilities.CreateInstance<HelperLib>( host.Services );
+        var svcDelDupesViaConsole = host.Services.GetRequiredService<DelDupesViaConsoleService>();
 
 
         // Uses System.CommandLine beta library
@@ -228,6 +231,12 @@ internal class Program
         };
         command12.SetHandler( (dryRun, CSVfile) => { HelperLib.DeleteFromCsvFile( dryRun, CSVfile ); }, dryRun, CSVfile );
         rootCommand.AddCommand( command12 );
+        #endregion
+
+        #region "subcommand13 DelDupesViaConsole - interactively delete duplicates via console"
+        Command command13 = new( "DelDupesViaConsole", "Interactively delete duplicate files via the console." );
+        command13.SetHandler( () => { svcDelDupesViaConsole.Execute(); } );
+        rootCommand.AddCommand( command13 );
         #endregion
 
 

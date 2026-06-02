@@ -111,7 +111,7 @@ Calculate and store up to 4 hashes in the CheckSum table for photos only.
 
 ### --ShaHash                true/<u>false</u>
 
-Claculate the SHA 256 value for the column.
+Calculate the SHA 256 value for the column.
 
 ### --AverageHash        true/<u>false</u>
 
@@ -158,6 +158,35 @@ Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
 ### Log file
 
 Writes to a log file by date in \Logs folder.
+
+## Subcommand13 - DelDupesViaConsole
+
+Interactively delete duplicate files via the console. Finds all SHA values in the CheckSum table that appear more than once, then steps through each group prompting for which file to delete.
+
+### Usage
+
+Using PowerShell from Bin folder or Developer PowerShell in Visual Studio.
+
+`./DupesMaint2 DelDupesViaConsole`
+
+### Interactive session
+
+For each group of duplicate files the command displays the SHA value and a numbered list of matching files with their date and size:
+
+```text
+SHA: a3f2c1...
+  1: C:\OneDrive\Photos\2023\01\photo.jpg  [2023-01-15  4,521,034 bytes]
+  2: C:\OneDrive\Photos\2024\06\photo.jpg  [2023-01-15  4,521,034 bytes]
+Enter 1-2 to delete, F to skip:
+```
+
+- Enter a **number** to delete that file from the filesystem and remove its CheckSum row from the database.
+- Enter **F** (or **f**) to skip to the next SHA group without deleting.
+- A running total of deleted files is shown after each deletion and at the end.
+
+### Logging
+
+All activity is written to the Serilog rolling log at `C:\Logs\DupesMaint2\DupesMaint2-.log`, including the full path of every file deleted and the final total.
 
 ## Process
 

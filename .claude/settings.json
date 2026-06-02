@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(Get-ChildItem -Path \"e:\\\\OneDrive\\\\Repos\\\\DupesMaint2\" -Directory)",
+      "Bash(Select-Object -ExpandProperty Name)",
+      "Bash(mkdir -p \"e:\\\\OneDrive\\\\Repos\\\\DupesMaint2\\\\Services\")",
+      "Bash(dotnet build *)",
+      "Bash(Select-String -NotMatch \"NU1903|sixlabors|SixLabors|pricing\")",
+      "PowerShell(cd \"e:\\\\OneDrive\\\\Repos\\\\DupesMaint2\"; dotnet build 2>&1 | Where-Object { $_ -notmatch \"NU1903|sixlabors|SixLabors|pricing\" })",
+      "PowerShell(cd \"e:\\\\OneDrive\\\\Repos\\\\DupesMaint2\"; dotnet build 2>&1 | Where-Object { $_ -match \"error\" })"
+    ],
+    "additionalDirectories": [
+      "e:\\OneDrive\\Repos\\DupesMaint2"
+    ]
+  }
+}
